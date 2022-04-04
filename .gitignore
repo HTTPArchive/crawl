@@ -127,3 +127,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Application-specific ignores
+data/
+.vscode/launch.json

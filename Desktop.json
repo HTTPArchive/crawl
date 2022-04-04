@@ -1,0 +1,17 @@
+{
+    "priority":0,
+    "fvonly":1,
+    "run_time_limit":300,
+    "timeline":1,
+    "Capture Video":1,
+    "runs":1,
+    "bwIn":5000,
+    "bwOut":1000,
+    "latency":25,
+    "browser":"Chrome",
+    "v8rcs":1,
+    "axe":0,
+    "browser_width":1920,
+    "browser_height":1080,
+    "locationText":"Google Cloud - US"
+  }
