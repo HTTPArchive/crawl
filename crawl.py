@@ -58,6 +58,7 @@ class Crawl(object):
         if not self.status['done']:
             self.retry_jobs()
             self.check_done()
+            self.save_status()
 
     def start_crawl(self):
         """Start a new crawl if necessary"""
