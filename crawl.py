@@ -37,7 +37,7 @@ class Crawl(object):
             if os.path.exists(template_file):
                 with open(template_file, 'rt') as f:
                     self.crawls[crawl_name]['job'] = json.load(f)
-        self.current_crawl = self.now.strftime('%Y-%d')
+        self.current_crawl = self.now.strftime('%Y-%m')
         self.id_characters = string.digits + string.ascii_uppercase
         self.project = 'httparchive'
         self.bucket = 'httparchive'
@@ -55,8 +55,9 @@ class Crawl(object):
     def run(self):
         """Main Crawl entrypoint"""
         self.start_crawl()
-        self.retry_jobs()
-        self.check_queues()
+        if not self.status['done']:
+            self.retry_jobs()
+            self.check_done()
 
     def start_crawl(self):
         """Start a new crawl if necessary"""
@@ -255,7 +256,7 @@ class Crawl(object):
         if failed_count:
             logging.info("%d tests failed all retries", failed_count)
 
-    def check_queues(self):
+    def check_done(self):
         """Check the pub/sub queue length to see the crawl progress"""
         try:
             from google.cloud import monitoring_v3
@@ -272,15 +273,47 @@ class Crawl(object):
             results = client.list_time_series(
                 request={
                     "name": 'projects/{}'.format(self.project),
-                    "filter": 'metric.type = "pubsub.googleapis.com/subscription/num_undelivered_messages"',
+                    "filter": 'metric.type = "pubsub.googleapis.com/subscription/num_undelivered_messages" AND resource.labels.subscription_id = "{}"'.format(self.crawl_queue),
                     "interval": interval,
                     "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
                 }
             )
 
+            self.status['pending'] = -1
+            timestamp = None
             for result in results:
-                is_queue = False
-                print(result)
+                for point in result.points:
+                    if timestamp is None or point.interval.end_time > timestamp:
+                        self.status['pending'] = point.value.int64_value
+                        timestamp = point.interval.end_time
+    
+            logging.info("%d tests pending", self.status['pending'])
+
+            # Mark the crawl as done if we haven't moved or submitted tests
+            # in the last hour and the crawl queue has been empty for an hour
+            if self.status['pending'] > 0:
+                self.status['last'] = now
+                if 'first_empty' in self.status:
+                    del self.status['first_empty']
+            elif self.status['pending'] == 0:
+                if 'first_empty' not in self.status:
+                    self.status['first_empty'] = now
+                elapsed_activity = now - self.status['last']
+                elapsed_empty = now - self.status['first_empty']
+                if elapsed_activity > 3600 and elapsed_empty > 3600:
+                    try:
+                        from google.cloud import storage
+                        client = storage.Client()
+                        bucket = client.get_bucket(self.bucket)
+                        for crawl_name in self.crawls:
+                            gcs_path = self.har_archive + '/' + self.crawls[crawl_name]['crawl_name'] + '/done'
+                            blob = bucket.blob(gcs_path)
+                            blob.upload_from_string('')
+                            logging.info('Uploaded done file to gs://%s/%s', self.bucket, gcs_path)
+                        logging.info('Crawl complete')
+                        self.status['done'] = True
+                    except Exception:
+                        logging.exception('Error marking crawls as done')
         except Exception:
             logging.exception('Error checking queue status')
 
