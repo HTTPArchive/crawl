@@ -59,6 +59,7 @@ class Crawl(object):
             self.retry_jobs()
             self.check_done()
             self.save_status()
+            logging.info('Done')
 
     def start_crawl(self):
         """Start a new crawl if necessary"""
@@ -337,6 +338,7 @@ class Crawl(object):
                 json.dump(self.status, f, indent=4, sort_keys=True)
         except Exception:
             logging.exception('Error saving status')
+        logging.info("Status: %s", json.dumps(self.status, indent=4, sort_keys=True))
 
     def num_to_str(self, num):
         """encode a number as an alphanum sequence"""
@@ -379,7 +381,6 @@ if __name__ == '__main__':
     run_once()
     crawl = Crawl()
     crawl.run()
-    logging.info('Done')
 
     # Force a hard exit so unclean threads can't hang the process
     os._exit(0)
