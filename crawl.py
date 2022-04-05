@@ -305,6 +305,7 @@ class Crawl(object):
                     self.status['first_empty'] = now
                 elapsed_activity = now - self.status['last']
                 elapsed_empty = now - self.status['first_empty']
+                logging.info("%0.1fs since last activity and %0.1fs since the queue became empty.", elapsed_activity, elapsed_empty)
                 if elapsed_activity > 3600 and elapsed_empty > 3600:
                     try:
                         from google.cloud import storage
