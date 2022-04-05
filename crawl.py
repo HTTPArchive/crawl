@@ -25,11 +25,11 @@ class Crawl(object):
         self.crawls = {
             'Desktop': {
                 'urls_file': 'urls/latest_crux_desktop.csv',
-                'crawl_name': self.now.strftime('chrome-%b_1%Y')
+                'crawl_name': self.now.strftime('chrome-%b_1_%Y')
             },
             'Mobile': {
                 'urls_file': 'urls/latest_crux_mobile.csv',
-                'crawl_name': self.now.strftime('android-%b_1%Y')
+                'crawl_name': self.now.strftime('android-%b_1_%Y')
             }
         }
         for crawl_name in self.crawls:
