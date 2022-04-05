@@ -373,6 +373,7 @@ if __name__ == '__main__':
     logging.basicConfig(
         level=logging.INFO,
         filename='crawl.log',
+        filemode='w',
         format="%(asctime)s.%(msecs)03d - %(message)s", datefmt="%H:%M:%S")
     run_once()
     crawl = Crawl()
