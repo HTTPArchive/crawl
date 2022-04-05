@@ -258,6 +258,8 @@ class Crawl(object):
         if retry_count:
             logging.info("%d tests submitted for retry", retry_count)
             self.status['last'] = time.time()
+            if 'first_empty' in self.status:
+                del self.status['first_empty']
         if failed_count:
             logging.info("%d tests failed all retries", failed_count)
 
