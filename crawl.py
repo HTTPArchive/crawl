@@ -342,7 +342,7 @@ class Crawl(object):
 
     def num_to_str(self, num):
         """encode a number as an alphanum sequence"""
-        num_str = ''
+        num_str = '0' if num == 0 else ''
         count = len(self.id_characters)
         while num > 0:
             index = int(num % count)
