@@ -45,7 +45,7 @@ class Crawl(object):
         self.retry_queue = 'crawl-queue-retry'
         self.failed_queue = 'crawl-queue-failed'
         self.test_archive = 'results'
-        self.har_archive = 'har_test'   #TODO (pmeenan): Change this to crawls after testing
+        self.har_archive = 'crawls'
         self.status = None
         self.status_file = os.path.join(self.data_path, 'status.json')
         self.load_status()
@@ -113,9 +113,6 @@ class Crawl(object):
         test_queue = publisher.topic_path(self.project, self.crawl_queue)
         retry_queue = publisher.topic_path(self.project, self.retry_queue)
         while not all_done:
-            #TODO (pmeenan): Remove this limit after testing
-            if test_count >= 100:
-                break
             for crawl_name in url_lists:
                 crawl = url_lists[crawl_name]
                 try:
