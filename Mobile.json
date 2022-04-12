@@ -3,7 +3,6 @@
     "fvonly":1,
     "run_time_limit":300,
     "timeline":1,
-    "timelineStackDepth":0,
     "Capture Video":1,
     "runs":1,
     "bwIn":9000,

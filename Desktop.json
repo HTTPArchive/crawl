@@ -9,6 +9,8 @@
     "bwOut":1000,
     "latency":25,
     "browser":"Chrome",
+    "lighthouse":1,
+    "lighthouseTrace":1,
     "v8rcs":1,
     "axe":0,
     "browser_width":1920,
