@@ -131,7 +131,9 @@ class Crawl(object):
                                     'metadata': {
                                         'rank': rank,
                                         'page_id': index,
-                                        'layout': crawl_name
+                                        'layout': crawl_name,
+                                        'crawl_depth': 0,
+                                        'link_depth': 0
                                     },
                                     'crux_api_key': random.choice(self.crux_keys),
                                     'pubsub_retry_queue': retry_queue,
