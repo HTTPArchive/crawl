@@ -220,37 +220,37 @@ class Crawl(object):
                 try:
                     response = subscriber.pull(request={
                         'subscription': subscription,
-                        'max_messages': 1,
+                        'max_messages': 1000,
                         'return_immediately': True,
-                        }, timeout=10)
-                    if len(response.received_messages) == 1:
-                        msg = response.received_messages[0]
-                        response_text = msg.message.data.decode('utf-8')
-                        job = json.loads(response_text)
-                        if 'metadata' in job and 'layout' in job['metadata']:
-                            crawl_name = job['metadata']['layout']
-                            if 'retry_count' not in job['metadata']:
-                                job['metadata']['retry_count'] = 0
-                            job['metadata']['retry_count'] += 1
-                            if job['metadata']['retry_count'] <= RETRY_COUNT:
-                                # resubmit the job to the main work queue
-                                job_str = json.dumps(job)
-                                try:
-                                    publisher_future = publisher.publish(test_queue, job_str.encode())
-                                    publisher_futures.append(publisher_future)
-                                    retry_count += 1
-                                except Exception:
-                                    logging.exception('Exception publishing job')
-                            else:
-                                failed_count += 1
-                                if self.status is not None and 'crawls' in self.status and crawl_name in self.status['crawls']:
-                                    crawl = self.status['crawls'][crawl_name]
-                                    if 'failed_count' not in crawl:
-                                        crawl['failed_count'] = 0
-                                    crawl['failed_count'] += 1
-                        subscriber.acknowledge(request={
-                            'subscription': subscription,
-                            'ack_ids': [msg.ack_id]})
+                        }, timeout=30)
+                    if len(response.received_messages) > 0:
+                        for msg in response.received_messages:
+                            response_text = msg.message.data.decode('utf-8')
+                            job = json.loads(response_text)
+                            if 'metadata' in job and 'layout' in job['metadata']:
+                                crawl_name = job['metadata']['layout']
+                                if 'retry_count' not in job['metadata']:
+                                    job['metadata']['retry_count'] = 0
+                                job['metadata']['retry_count'] += 1
+                                if job['metadata']['retry_count'] <= RETRY_COUNT:
+                                    # resubmit the job to the main work queue
+                                    job_str = json.dumps(job)
+                                    try:
+                                        publisher_future = publisher.publish(test_queue, job_str.encode())
+                                        publisher_futures.append(publisher_future)
+                                        retry_count += 1
+                                    except Exception:
+                                        logging.exception('Exception publishing job')
+                                else:
+                                    failed_count += 1
+                                    if self.status is not None and 'crawls' in self.status and crawl_name in self.status['crawls']:
+                                        crawl = self.status['crawls'][crawl_name]
+                                        if 'failed_count' not in crawl:
+                                            crawl['failed_count'] = 0
+                                        crawl['failed_count'] += 1
+                            subscriber.acknowledge(request={
+                                'subscription': subscription,
+                                'ack_ids': [msg.ack_id]})
                     else:
                         done = True
                 except Exception:
