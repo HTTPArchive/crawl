@@ -206,69 +206,78 @@ class Crawl(object):
         """Retry any jobs in the retry or failed queue"""
         from google.cloud import pubsub_v1
         logging.info('Checking for jobs that need to be retried...')
-        subscriber = pubsub_v1.SubscriberClient()            
-        publisher = pubsub_v1.PublisherClient()
-        test_queue = publisher.topic_path(self.project, self.crawl_queue)
-        publisher_futures = []
-        queues = [self.retry_queue, self.failed_queue]
-        retry_count = 0
-        failed_count = 0
-        for queue_name in queues:
-            done = False
-            subscription = subscriber.subscription_path(self.project, queue_name)
-            while not done:
-                try:
-                    response = subscriber.pull(request={
-                        'subscription': subscription,
-                        'max_messages': 1000,
-                        'return_immediately': True,
-                        }, timeout=30)
-                    if len(response.received_messages) > 0:
-                        for msg in response.received_messages:
+        try:
+            subscriber = pubsub_v1.SubscriberClient()            
+            publisher = pubsub_v1.PublisherClient()
+            test_queue = publisher.topic_path(self.project, self.crawl_queue)
+            publisher_futures = []
+            queues = [self.retry_queue, self.failed_queue]
+            retry_count = 0
+            failed_count = 0
+            for queue_name in queues:
+                done = False
+                subscription = subscriber.subscription_path(self.project, queue_name)
+                while not done:
+                    try:
+                        response = subscriber.pull(request={
+                            'subscription': subscription,
+                            'max_messages': 1000,
+                            'return_immediately': True,
+                            }, timeout=30)
+                        if len(response.received_messages) > 0:
                             try:
-                                response_text = msg.message.data.decode('utf-8')
-                                job = json.loads(response_text)
-                                if 'metadata' in job and 'layout' in job['metadata']:
-                                    crawl_name = job['metadata']['layout']
-                                    if 'retry_count' not in job['metadata']:
-                                        job['metadata']['retry_count'] = 0
-                                    job['metadata']['retry_count'] += 1
-                                    if job['metadata']['retry_count'] <= RETRY_COUNT:
-                                        # resubmit the job to the main work queue
-                                        job_str = json.dumps(job)
-                                        try:
-                                            publisher_future = publisher.publish(test_queue, job_str.encode())
-                                            publisher_futures.append(publisher_future)
-                                            retry_count += 1
-                                        except Exception:
-                                            logging.exception('Exception publishing job')
-                                    else:
-                                        failed_count += 1
-                                        if self.status is not None and 'crawls' in self.status and crawl_name in self.status['crawls']:
-                                            crawl = self.status['crawls'][crawl_name]
-                                            if 'failed_count' not in crawl:
-                                                crawl['failed_count'] = 0
-                                            crawl['failed_count'] += 1
-                                subscriber.acknowledge(request={
-                                    'subscription': subscription,
-                                    'ack_ids': [msg.ack_id]})
+                                ack_ids = []
+                                for msg in response.received_messages:
+                                    try:
+                                        response_text = msg.message.data.decode('utf-8')
+                                        job = json.loads(response_text)
+                                        if 'metadata' in job and 'layout' in job['metadata']:
+                                            crawl_name = job['metadata']['layout']
+                                            if 'retry_count' not in job['metadata']:
+                                                job['metadata']['retry_count'] = 0
+                                            job['metadata']['retry_count'] += 1
+                                            if job['metadata']['retry_count'] <= RETRY_COUNT:
+                                                # resubmit the job to the main work queue
+                                                job_str = json.dumps(job)
+                                                try:
+                                                    publisher_future = publisher.publish(test_queue, job_str.encode())
+                                                    publisher_futures.append(publisher_future)
+                                                    retry_count += 1
+                                                except Exception:
+                                                    logging.exception('Exception publishing job')
+                                            else:
+                                                failed_count += 1
+                                                if self.status is not None and 'crawls' in self.status and crawl_name in self.status['crawls']:
+                                                    crawl = self.status['crawls'][crawl_name]
+                                                    if 'failed_count' not in crawl:
+                                                        crawl['failed_count'] = 0
+                                                    crawl['failed_count'] += 1
+                                        ack_ids.append(msg.ack_id)
+                                    except Exception:
+                                        logging.exception('Error Processing message')
+                                if len(ack_ids):
+                                    subscriber.acknowledge(request={
+                                        'subscription': subscription,
+                                        'ack_ids': ack_ids})
                             except Exception:
-                                logging.exception('Error Processing message')
-                    else:
+                                logging.exception('Error processing chunk of retries')
+                        else:
+                            done = True
+                    except Exception:
+                        logging.exception('Error processing retry queue')
                         done = True
-                except Exception:
-                    logging.exception('Error processing retry queue')
-                    done = True
-        subscriber.close()
-        if len(publisher_futures):
-            futures.wait(publisher_futures, return_when=futures.ALL_COMPLETED)
-        if retry_count:
-            logging.info("%d tests submitted for retry", retry_count)
-            self.status['last'] = time.time()
-            if 'first_empty' in self.status:
-                del self.status['first_empty']
-        if failed_count:
-            logging.info("%d tests failed all retries", failed_count)
+            subscriber.close()
+            if len(publisher_futures):
+                futures.wait(publisher_futures, return_when=futures.ALL_COMPLETED)
+            if retry_count:
+                logging.info("%d tests submitted for retry", retry_count)
+                self.status['last'] = time.time()
+                if 'first_empty' in self.status:
+                    del self.status['first_empty']
+            if failed_count:
+                logging.info("%d tests failed all retries", failed_count)
+        except Exception:
+            logging.exception('Error checking retry queue')
 
     def check_done(self):
         """Check the pub/sub queue length to see the crawl progress"""
