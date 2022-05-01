@@ -60,8 +60,9 @@ class Crawl(object):
         if not self.status['done']:
             self.retry_jobs()
             self.check_done()
-            if self.previous_pending and self.previous_time and self.status is not None and 'pending' in self.status and 'last' in self.status:
-                elapsed = self.previous_time - self.status['last']
+            self.status['tm'] = time.time()
+            if self.previous_pending and self.previous_time and self.status is not None and 'pending' in self.status:
+                elapsed = self.status['tm'] - self.previous_time
                 count = self.previous_pending - self.status['pending']
                 if elapsed > 0 and count > 0:
                     self.status['rate'] = int(round((count * 3600) / elapsed))
@@ -362,8 +363,8 @@ class Crawl(object):
         if self.status is not None:
             if 'pending' in self.status:
                 self.previous_pending = self.status['pending']
-            if 'last' in self.status:
-                self.previous_time = self.status['last']
+            if 'tm' in self.status:
+                self.previous_time = self.status['tm']
 
 
     def save_status(self):
