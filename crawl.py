@@ -47,6 +47,8 @@ class Crawl(object):
         self.test_archive = 'results'
         self.har_archive = 'crawls'
         self.status = None
+        self.previous_pending = None
+        self.previous_time = None
         self.status_file = os.path.join(self.data_path, 'status.json')
         self.load_status()
         with open(os.path.join(self.root_path, 'crux_keys.json'), 'rt') as f:
@@ -58,8 +60,16 @@ class Crawl(object):
         if not self.status['done']:
             self.retry_jobs()
             self.check_done()
+            if self.previous_pending and self.previous_time and self.status is not None and 'pending' in self.status and 'last' in self.status:
+                elapsed = self.previous_time - self.status['last']
+                count = self.previous_pending - self.status['pending']
+                if elapsed > 0 and count > 0:
+                    self.status['rate'] = int(round((count * 3600) / elapsed))
             self.save_status()
-            logging.info('Done')
+            if 'rate' in self.status:
+                logging.info('Done - Test rate: %d tests per hour', self.status['rate'])
+            else:
+                logging.info('Done')
 
     def start_crawl(self):
         """Start a new crawl if necessary"""
@@ -349,6 +359,12 @@ class Crawl(object):
                     self.status = json.load(f)
             except Exception:
                 logging.exception('Error loading status')
+        if self.status is not None:
+            if 'pending' in self.status:
+                self.previous_pending = self.status['pending']
+            if 'last' in self.status:
+                self.previous_time = self.status['last']
+
 
     def save_status(self):
         """Save the crawls status file"""
