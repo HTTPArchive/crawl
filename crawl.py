@@ -357,7 +357,7 @@ class Crawl(object):
                 json.dump(self.status, f, indent=4, sort_keys=True)
         except Exception:
             logging.exception('Error saving status')
-        logging.info("Status: %s", json.dumps(self.status, indent=4, sort_keys=True))
+        logging.info("Status: %s", json.dumps(self.status, sort_keys=True))
 
     def num_to_str(self, num):
         """encode a number as an alphanum sequence"""
