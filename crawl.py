@@ -214,8 +214,9 @@ class Crawl(object):
             crawl['fp'].close()
 
     def retry_jobs(self):
-        """Retry any jobs in the retry or failed queue"""
+        """Retry any jobs in the retry or failed queue (up to 4 minutes)"""
         from google.cloud import pubsub_v1
+        from time import monotonic
         logging.info('Checking for jobs that need to be retried...')
         try:
             subscriber = pubsub_v1.SubscriberClient()            
@@ -228,7 +229,8 @@ class Crawl(object):
             for queue_name in queues:
                 done = False
                 subscription = subscriber.subscription_path(self.project, queue_name)
-                while not done:
+                end_time = monotonic() + 240
+                while not done and monotonic() < end_time:
                     try:
                         response = subscriber.pull(request={
                             'subscription': subscription,
