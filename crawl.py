@@ -65,6 +65,11 @@ class Crawl(object):
         """Start a new crawl if necessary"""
         if self.status is None or 'crawl' not in self.status or self.status['crawl'] != self.current_crawl:
             try:
+                # Delete the old log
+                try:
+                    os.unlink('crawl.log')
+                except Exception:
+                    pass
                 self.update_url_lists()
                 self.submit_tests()
                 self.save_status()
@@ -378,7 +383,6 @@ if __name__ == '__main__':
     logging.basicConfig(
         level=logging.INFO,
         filename='crawl.log',
-        filemode='w',
         format="%(asctime)s.%(msecs)03d - %(message)s", datefmt="%H:%M:%S")
     run_once()
     crawl = Crawl()
