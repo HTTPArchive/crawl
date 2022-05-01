@@ -221,7 +221,7 @@ class Crawl(object):
                     try:
                         response = subscriber.pull(request={
                             'subscription': subscription,
-                            'max_messages': 1000,
+                            'max_messages': 100,
                             'return_immediately': True,
                             }, timeout=30)
                         if len(response.received_messages) > 0:
