@@ -147,6 +147,7 @@ class Crawl(object):
                                     'metadata': {
                                         'rank': rank,
                                         'page_id': index,
+                                        'tested_url': url,
                                         'layout': crawl_name,
                                         'crawl_depth': 0,
                                         'link_depth': 0
