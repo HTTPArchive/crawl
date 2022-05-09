@@ -327,8 +327,6 @@ class Crawl(object):
                                         'link_depth': 0
                                     },
                                     'pubsub_retry_queue': retry_queue,
-                                    'pubsub_completed_queue': completed_queue,
-                                    'pubsub_completed_metrics': ['crawl_links'],
                                     'gcs_test_archive': {
                                         'bucket': self.bucket,
                                         'path': self.test_archive
@@ -338,6 +336,9 @@ class Crawl(object):
                                         'path': self.har_archive + '/' + self.crawls[crawl_name]['crawl_name']
                                     }
                                 }
+                                if MAX_DEPTH > 0:
+                                    job['pubsub_completed_queue'] = completed_queue
+                                    job['pubsub_completed_metrics'] = ['crawl_links']
                                 if self.crux_keys is not None and len(self.crux_keys):
                                     job['crux_api_key'] = random.choice(self.crux_keys)
                                 if 'job' in self.crawls[crawl_name]:
