@@ -17,7 +17,9 @@ except BaseException:
     import json
 
 RETRY_COUNT = 2
-TESTING = True
+MAX_DEPTH = 1
+MAX_BREADTH = 1
+TESTING = False
 
 class Crawl(object):
     """Main agent workflow"""
@@ -59,6 +61,7 @@ class Crawl(object):
             self.har_archive += '-test'
         self.status = None
         self.previous_pending = None
+        self.previous_count = None
         self.previous_time = None
         self.status_file = os.path.join(self.data_path, 'status.json')
         self.status_mutex = threading.Lock()
@@ -81,11 +84,15 @@ class Crawl(object):
             retry_subscriber = pubsub_v1.SubscriberClient()
             retry_subscription = retry_subscriber.subscription_path(self.project, self.retry_queue)
             retry_flow_control = pubsub_v1.types.FlowControl(max_messages=100)
-            retry_future = retry_subscriber.subscribe(retry_subscription, callback=self.retry_job, flow_control=retry_flow_control)
+            retry_future = retry_subscriber.subscribe(retry_subscription, callback=self.retry_job, flow_control=retry_flow_control, await_callbacks_on_shutdown=True)
             failed_subscriber = pubsub_v1.SubscriberClient()
             failed_subscription = failed_subscriber.subscription_path(self.project, self.failed_queue)
             failed_flow_control = pubsub_v1.types.FlowControl(max_messages=100)
-            failed_future = failed_subscriber.subscribe(failed_subscription, callback=self.retry_job, flow_control=failed_flow_control)
+            failed_future = failed_subscriber.subscribe(failed_subscription, callback=self.retry_job, flow_control=failed_flow_control, await_callbacks_on_shutdown=True)
+            completed_subscriber = pubsub_v1.SubscriberClient()
+            completed_subscription = completed_subscriber.subscription_path(self.project, self.completed_queue)
+            completed_flow_control = pubsub_v1.types.FlowControl(max_messages=100)
+            completed_future = completed_subscriber.subscribe(completed_subscription, callback=self.crawl_job, flow_control=completed_flow_control, await_callbacks_on_shutdown=True)
 
             # Pump jobs for 4 minutes
             time.sleep(240)
@@ -93,24 +100,27 @@ class Crawl(object):
             # Cancel the subscriptions and drain any work
             retry_future.cancel()
             failed_future.cancel()
+            completed_future.cancel()
             retry_future.result(timeout=300)
             failed_future.result(timeout=300)
+            completed_future.result(timeout=300)
 
             # Check the status of the overall crawl
-            self.status_mutex.acquire()
-            self.check_done()
-            self.status['tm'] = time.time()
-            if self.previous_pending and self.previous_time and self.status is not None and 'pending' in self.status:
-                elapsed = self.status['tm'] - self.previous_time
-                count = self.previous_pending - self.status['pending']
-                if elapsed > 0 and count > 0:
-                    self.status['rate'] = int(round((count * 3600) / elapsed))
-            self.save_status()
-            if 'rate' in self.status:
-                logging.info('Done - Test rate: %d tests per hour', self.status['rate'])
-            else:
-                logging.info('Done')
-            self.status_mutex.release()
+            with self.status_mutex:
+                self.check_done()
+                self.status['tm'] = time.time()
+                if self.previous_pending and self.previous_time and self.status is not None and 'pending' in self.status:
+                    elapsed = self.status['tm'] - self.previous_time
+                    count = self.previous_pending - self.status['pending']
+                    if self.previous_count and 'count' in self.status and self.status['count'] > self.previous_count:
+                        count += self.status['count'] - self.previous_count
+                    if elapsed > 0 and count > 0:
+                        self.status['rate'] = int(round((count * 3600) / elapsed))
+                self.save_status()
+                if 'rate' in self.status:
+                    logging.info('Done - Test rate: %d tests per hour', self.status['rate'])
+                else:
+                    logging.info('Done')
         self.must_exit = True
         self.job_thread.join(timeout=600)
 
@@ -118,6 +128,7 @@ class Crawl(object):
         """Pubsub callback for jobs that may need to be retried"""
         try:
             job = json.loads(message.data.decode('utf-8'))
+            logging.debug('Retry test request: %s', json.dumps(job))
             if job is not None and 'metadata' in job and 'layout' in job['metadata']:
                 crawl_name = job['metadata']['layout']
                 if 'retry_count' not in job['metadata']:
@@ -126,13 +137,70 @@ class Crawl(object):
                 if job['metadata']['retry_count'] <= RETRY_COUNT:
                     self.job_queue.put(job, block=True, timeout=300)
                 else:
-                    self.status_mutex.acquire()
-                    if self.status is not None and 'crawls' in self.status and crawl_name in self.status['crawls']:
-                        crawl = self.status['crawls'][crawl_name]
-                        if 'failed_count' not in crawl:
-                            crawl['failed_count'] = 0
-                        crawl['failed_count'] += 1
-                    self.status_mutex.release()
+                    with self.status_mutex:
+                        if self.status is not None and 'crawls' in self.status and crawl_name in self.status['crawls']:
+                            crawl = self.status['crawls'][crawl_name]
+                            if 'failed_count' not in crawl:
+                                crawl['failed_count'] = 0
+                            crawl['failed_count'] += 1
+        except Exception:
+            logging.exception('Error processing pubsub job')
+        message.ack()
+
+    def crawl_job(self, message):
+        """Pubsub callback for jobs that completed (for crawling deeper into)"""
+        try:
+            import copy
+            job = json.loads(message.data.decode('utf-8'))
+            logging.debug('Completed job: %s', json.dumps(job))
+            if job is not None and 'metadata' in job and 'layout' in job['metadata'] and \
+                    'crawl_depth' in job['metadata'] and job['metadata']['crawl_depth'] < MAX_DEPTH and \
+                    'results' in job:
+                crawl_name = job['metadata']['layout']
+                job['metadata']['crawl_depth'] += 1
+                if job['metadata']['crawl_depth'] == MAX_DEPTH and 'pubsub_completed_queue' in job:
+                    del job['pubsub_completed_queue']
+                job['metadata']['retry_count'] = 0
+                links = []
+                try:
+                    links = job['results']['1']['FirstView']['1']['crawl_links']
+                except Exception:
+                    logging.exception('Failed to get crawl links from result')
+                # Keep track of which pages on this origin have been visited
+                visited = job['metadata'].get('visited', [job['url']])
+                width = 0
+                crawl_links = []
+                logging.debug('Visited: %s', json.dumps(visited))
+                if links:
+                    for link in links:
+                        if link not in visited:
+                            width += 1
+                            if width > MAX_BREADTH:
+                                break
+                            crawl_links.append(link)
+                            visited.append(link)
+                logging.debug('Crawl Links: %s', json.dumps(crawl_links))
+                job['metadata']['visited'] = visited
+                # Create the new jobs
+                width = 0
+                for link in crawl_links:
+                    page_id = None
+                    with self.status_mutex:
+                        self.status['count'] += 1
+                        page_id = self.status['count']
+                        self.status['crawls'][crawl_name]['url_count'] += 1
+                    new_job = copy.deepcopy(job)
+                    del new_job['results']
+                    new_job['Test ID'] = self.generate_test_id(crawl_name, page_id)
+                    new_job['url'] = link
+                    new_job['metadata']['link_depth'] = width
+                    new_job['metadata']['page_id'] = page_id
+                    new_job['metadata']['tested_url'] = link
+                    logging.debug('Queueing crawl job: %s', json.dumps(new_job))
+                    self.job_queue.put(new_job, block=True, timeout=300)
+                    width += 1
+            else:
+                logging.debug('Invalid crawl job')
         except Exception:
             logging.exception('Error processing pubsub job')
         message.ack()
@@ -165,6 +233,7 @@ class Crawl(object):
 
     def submit_jobs(self):
         """Background thread that takes jobs from the job queue and submits them to the pubsub pending jobs list"""
+        logging.debug('Submit thread started')
         from google.cloud import pubsub_v1
         batch_settings = pubsub_v1.types.BatchSettings(
             max_messages = 1000,                  # 1000 messages
@@ -178,31 +247,35 @@ class Crawl(object):
         total_count = 0
         while not self.must_exit:
             try:
-                job = self.job_queue.get(block=True, timeout=1)
-                if job is not None:
-                    job_str = json.dumps(job)
-                    try:
-                        publisher_future = publisher.publish(test_queue, job_str.encode())
-                        publisher_futures.append(publisher_future)
-                        pending_count += 1
-                        total_count += 1
-                        if pending_count >= 10000:
-                            futures.wait(publisher_futures, return_when=futures.ALL_COMPLETED)
-                            logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
-                            publisher_futures = []
-                            pending_count = 0
-                    except Exception:
-                        logging.exception
+                while not self.must_exit:
+                    job = self.job_queue.get(block=True, timeout=5)
+                    if job is not None:
+                        job_str = json.dumps(job)
+                        logging.debug('Submitting job: %s', job_str)
+                        try:
+                            publisher_future = publisher.publish(test_queue, job_str.encode())
+                            publisher_futures.append(publisher_future)
+                            pending_count += 1
+                            total_count += 1
+                            if pending_count >= 10000:
+                                futures.wait(publisher_futures, return_when=futures.ALL_COMPLETED)
+                                logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
+                                publisher_futures = []
+                                pending_count = 0
+                        except Exception:
+                            logging.exception
             except Exception:
                 pass
-        if len(publisher_futures):
-            futures.wait(publisher_futures, return_when=futures.ALL_COMPLETED)
-            logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
+            if len(publisher_futures):
+                futures.wait(publisher_futures, return_when=futures.ALL_COMPLETED)
+                logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
+                publisher_futures = []
+                pending_count = 0
         if total_count:
-            self.status_mutex.acquire()
-            self.status['last'] = time.time()
-            self.status_mutex.release()
+            with self.status_mutex:
+                self.status['last'] = time.time()
         publisher.stop()
+        logging.debug('Submit thread complete')
 
     def submit_initial_tests(self):
         """Interleave between the URL lists for the various crawls and post jobs to the submit thread"""
@@ -372,6 +445,8 @@ class Crawl(object):
         if self.status is not None:
             if 'pending' in self.status:
                 self.previous_pending = self.status['pending']
+            if 'count' in self.status:
+                self.previous_count = self.status['count']
             if 'tm' in self.status:
                 self.previous_time = self.status['tm']
 
@@ -420,10 +495,15 @@ def run_once():
         os._exit(0)
 
 if __name__ == '__main__':
-    logging.basicConfig(
-        level=logging.INFO,
-        filename='crawl.log',
-        format="%(asctime)s.%(msecs)03d - %(message)s", datefmt="%H:%M:%S")
+    if TESTING:
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="%(asctime)s.%(msecs)03d - %(message)s", datefmt="%H:%M:%S")
+    else:
+        logging.basicConfig(
+            level=logging.INFO,
+            filename='crawl.log',
+            format="%(asctime)s.%(msecs)03d - %(message)s", datefmt="%H:%M:%S")
     run_once()
     crawl = Crawl()
     crawl.run()
