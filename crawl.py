@@ -17,7 +17,7 @@ except BaseException:
     import json
 
 RETRY_COUNT = 2
-MAX_DEPTH = 1
+MAX_DEPTH = 0
 MAX_BREADTH = 1
 TESTING = False
 
