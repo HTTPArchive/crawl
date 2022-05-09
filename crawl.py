@@ -5,9 +5,11 @@ from concurrent import futures
 from datetime import datetime
 import fcntl
 import logging
+import multiprocessing
 import os
 import random
 import string
+import threading
 import time
 try:
     import ujson as json
@@ -15,10 +17,12 @@ except BaseException:
     import json
 
 RETRY_COUNT = 2
+TESTING = True
 
 class Crawl(object):
     """Main agent workflow"""
     def __init__(self):
+        self.must_exit = False
         self.now = datetime.now()
         self.root_path = os.path.abspath(os.path.dirname(__file__))
         self.data_path = os.path.join(self.root_path, 'data')
@@ -44,21 +48,56 @@ class Crawl(object):
         self.crawl_queue = 'crawl-queue'
         self.retry_queue = 'crawl-queue-retry'
         self.failed_queue = 'crawl-queue-failed'
+        self.completed_queue = 'crawl-queue-completed'
         self.test_archive = 'results'
         self.har_archive = 'crawls'
+        if TESTING:
+            self.crawl_queue += '-test'
+            self.retry_queue += '-test'
+            self.failed_queue += '-test'
+            self.completed_queue += '-test'
+            self.har_archive += '-test'
         self.status = None
         self.previous_pending = None
         self.previous_time = None
         self.status_file = os.path.join(self.data_path, 'status.json')
+        self.status_mutex = threading.Lock()
         self.load_status()
-        with open(os.path.join(self.root_path, 'crux_keys.json'), 'rt') as f:
-            self.crux_keys = json.load(f)
+        self.crux_keys = []
+        crux_file = os.path.join(self.root_path, 'crux_keys.json')
+        if os.path.exists(crux_file):
+            with open(crux_file, 'rt') as f:
+                self.crux_keys = json.load(f)
+        self.job_queue = multiprocessing.JoinableQueue(maxsize=1000)
 
     def run(self):
         """Main Crawl entrypoint"""
+        self.job_thread = threading.Thread(target=self.submit_jobs)
+        self.job_thread.start()
         self.start_crawl()
         if not self.status['done']:
-            self.retry_jobs()
+            # Start subscriptions for the retry and failed queues
+            from google.cloud import pubsub_v1
+            retry_subscriber = pubsub_v1.SubscriberClient()
+            retry_subscription = retry_subscriber.subscription_path(self.project, self.retry_queue)
+            retry_flow_control = pubsub_v1.types.FlowControl(max_messages=100)
+            retry_future = retry_subscriber.subscribe(retry_subscription, callback=self.retry_job, flow_control=retry_flow_control)
+            failed_subscriber = pubsub_v1.SubscriberClient()
+            failed_subscription = failed_subscriber.subscription_path(self.project, self.failed_queue)
+            failed_flow_control = pubsub_v1.types.FlowControl(max_messages=100)
+            failed_future = failed_subscriber.subscribe(failed_subscription, callback=self.retry_job, flow_control=failed_flow_control)
+
+            # Pump jobs for 4 minutes
+            time.sleep(240)
+
+            # Cancel the subscriptions and drain any work
+            retry_future.cancel()
+            failed_future.cancel()
+            retry_future.result(timeout=300)
+            failed_future.result(timeout=300)
+
+            # Check the status of the overall crawl
+            self.status_mutex.acquire()
             self.check_done()
             self.status['tm'] = time.time()
             if self.previous_pending and self.previous_time and self.status is not None and 'pending' in self.status:
@@ -71,6 +110,32 @@ class Crawl(object):
                 logging.info('Done - Test rate: %d tests per hour', self.status['rate'])
             else:
                 logging.info('Done')
+            self.status_mutex.release()
+        self.must_exit = True
+        self.job_thread.join(timeout=600)
+
+    def retry_job(self, message):
+        """Pubsub callback for jobs that may need to be retried"""
+        try:
+            job = json.loads(message.data.decode('utf-8'))
+            if job is not None and 'metadata' in job and 'layout' in job['metadata']:
+                crawl_name = job['metadata']['layout']
+                if 'retry_count' not in job['metadata']:
+                    job['metadata']['retry_count'] = 0
+                job['metadata']['retry_count'] += 1
+                if job['metadata']['retry_count'] <= RETRY_COUNT:
+                    self.job_queue.put(job, block=True, timeout=300)
+                else:
+                    self.status_mutex.acquire()
+                    if self.status is not None and 'crawls' in self.status and crawl_name in self.status['crawls']:
+                        crawl = self.status['crawls'][crawl_name]
+                        if 'failed_count' not in crawl:
+                            crawl['failed_count'] = 0
+                        crawl['failed_count'] += 1
+                    self.status_mutex.release()
+        except Exception:
+            logging.exception('Error processing pubsub job')
+        message.ack()
 
     def start_crawl(self):
         """Start a new crawl if necessary"""
@@ -82,7 +147,7 @@ class Crawl(object):
                 except Exception:
                     pass
                 self.update_url_lists()
-                self.submit_tests()
+                self.submit_initial_tests()
                 self.save_status()
             except Exception:
                 logging.exception('Error starting new crawl')
@@ -98,8 +163,49 @@ class Crawl(object):
             blob = bucket.blob(crawl['urls_file'])
             blob.download_to_filename(os.path.join(self.data_path, crawl_name + '.csv'))
 
-    def submit_tests(self):
-        """Interleave between the URL lists for the various crawls"""
+    def submit_jobs(self):
+        """Background thread that takes jobs from the job queue and submits them to the pubsub pending jobs list"""
+        from google.cloud import pubsub_v1
+        batch_settings = pubsub_v1.types.BatchSettings(
+            max_messages = 1000,                  # 1000 messages
+            max_bytes = 1 * 1000 * 1000 * 100,    # 100MB
+            max_latency = 0.1,                    # 100ms
+        )
+        publisher = pubsub_v1.PublisherClient(batch_settings)
+        publisher_futures = []
+        test_queue = publisher.topic_path(self.project, self.crawl_queue)
+        pending_count = 0
+        total_count = 0
+        while not self.must_exit:
+            try:
+                job = self.job_queue.get(block=True, timeout=1)
+                if job is not None:
+                    job_str = json.dumps(job)
+                    try:
+                        publisher_future = publisher.publish(test_queue, job_str.encode())
+                        publisher_futures.append(publisher_future)
+                        pending_count += 1
+                        total_count += 1
+                        if pending_count >= 10000:
+                            futures.wait(publisher_futures, return_when=futures.ALL_COMPLETED)
+                            logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
+                            publisher_futures = []
+                            pending_count = 0
+                    except Exception:
+                        logging.exception
+            except Exception:
+                pass
+        if len(publisher_futures):
+            futures.wait(publisher_futures, return_when=futures.ALL_COMPLETED)
+            logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
+        if total_count:
+            self.status_mutex.acquire()
+            self.status['last'] = time.time()
+            self.status_mutex.release()
+        publisher.stop()
+
+    def submit_initial_tests(self):
+        """Interleave between the URL lists for the various crawls and post jobs to the submit thread"""
         import csv
         from google.cloud import pubsub_v1
 
@@ -117,18 +223,13 @@ class Crawl(object):
         # Iterate over all of the crawls in parallel
         all_done = False
         index = 0
-        batch_settings = pubsub_v1.types.BatchSettings(
-            max_messages = 1000,                  # 1000 messages
-            max_bytes = 1 * 1000 * 1000 * 100,    # 100MB
-            max_latency = 0.1,                    # 100ms
-        )
-        publisher = pubsub_v1.PublisherClient(batch_settings)
-        publisher_futures = []
-        pending_count = 0
+        publisher = pubsub_v1.PublisherClient()
         test_count = 0
-        test_queue = publisher.topic_path(self.project, self.crawl_queue)
         retry_queue = publisher.topic_path(self.project, self.retry_queue)
+        completed_queue = publisher.topic_path(self.project, self.completed_queue)
         while not all_done:
+            if TESTING and test_count > 10:
+                break
             for crawl_name in url_lists:
                 crawl = url_lists[crawl_name]
                 try:
@@ -152,8 +253,9 @@ class Crawl(object):
                                         'crawl_depth': 0,
                                         'link_depth': 0
                                     },
-                                    'crux_api_key': random.choice(self.crux_keys),
                                     'pubsub_retry_queue': retry_queue,
+                                    'pubsub_completed_queue': completed_queue,
+                                    'pubsub_completed_metrics': ['crawl_links'],
                                     'gcs_test_archive': {
                                         'bucket': self.bucket,
                                         'path': self.test_archive
@@ -163,21 +265,12 @@ class Crawl(object):
                                         'path': self.har_archive + '/' + self.crawls[crawl_name]['crawl_name']
                                     }
                                 }
+                                if self.crux_keys is not None and len(self.crux_keys):
+                                    job['crux_api_key'] = random.choice(self.crux_keys)
                                 if 'job' in self.crawls[crawl_name]:
                                     job.update(self.crawls[crawl_name]['job'])
-                                job_str = json.dumps(job)
-                                try:
-                                    publisher_future = publisher.publish(test_queue, job_str.encode())
-                                    publisher_futures.append(publisher_future)
-                                    pending_count += 1
-                                    test_count += 1
-                                except Exception:
-                                    logging.exception('Exception publishing job')
-                                if pending_count >= 10000:
-                                    futures.wait(publisher_futures, return_when=futures.ALL_COMPLETED)
-                                    logging.info('Queued %d tests (%d in this batch)...', index, pending_count)
-                                    publisher_futures = []
-                                    pending_count = 0
+                                self.job_queue.put(job, block=True, timeout=600)
+                                test_count += 1
                     except Exception:
                         logging.exception('Error processing URL')
                 except StopIteration:
@@ -186,14 +279,6 @@ class Crawl(object):
                     for name in url_lists:
                         if not url_lists[name]['done']:
                             all_done = False
-
-        # Wait for all of the pending jobs to submit
-        publisher.stop()
-        if pending_count > 0:
-            futures.wait(publisher_futures, return_when=futures.ALL_COMPLETED)
-            logging.info('Queued %d tests...', index)
-            publisher_futures = []
-            pending_count = 0
 
         self.status = {
             'crawl': self.current_crawl,
@@ -213,85 +298,6 @@ class Crawl(object):
             }
             logging.info('%s URLs submitted: %d', crawl_name, crawl['count'])
             crawl['fp'].close()
-
-    def retry_jobs(self):
-        """Retry any jobs in the retry or failed queue (up to 4 minutes)"""
-        from google.cloud import pubsub_v1
-        from time import monotonic
-        logging.info('Checking for jobs that need to be retried...')
-        try:
-            subscriber = pubsub_v1.SubscriberClient()            
-            publisher = pubsub_v1.PublisherClient()
-            test_queue = publisher.topic_path(self.project, self.crawl_queue)
-            publisher_futures = []
-            queues = [self.retry_queue, self.failed_queue]
-            retry_count = 0
-            failed_count = 0
-            for queue_name in queues:
-                done = False
-                subscription = subscriber.subscription_path(self.project, queue_name)
-                end_time = monotonic() + 240
-                while not done and monotonic() < end_time:
-                    try:
-                        response = subscriber.pull(request={
-                            'subscription': subscription,
-                            'max_messages': 100,
-                            'return_immediately': True,
-                            }, timeout=30)
-                        if len(response.received_messages) > 0:
-                            try:
-                                ack_ids = []
-                                for msg in response.received_messages:
-                                    try:
-                                        response_text = msg.message.data.decode('utf-8')
-                                        job = json.loads(response_text)
-                                        if 'metadata' in job and 'layout' in job['metadata']:
-                                            crawl_name = job['metadata']['layout']
-                                            if 'retry_count' not in job['metadata']:
-                                                job['metadata']['retry_count'] = 0
-                                            job['metadata']['retry_count'] += 1
-                                            if job['metadata']['retry_count'] <= RETRY_COUNT:
-                                                # resubmit the job to the main work queue
-                                                job_str = json.dumps(job)
-                                                try:
-                                                    publisher_future = publisher.publish(test_queue, job_str.encode())
-                                                    publisher_futures.append(publisher_future)
-                                                    retry_count += 1
-                                                except Exception:
-                                                    logging.exception('Exception publishing job')
-                                            else:
-                                                failed_count += 1
-                                                if self.status is not None and 'crawls' in self.status and crawl_name in self.status['crawls']:
-                                                    crawl = self.status['crawls'][crawl_name]
-                                                    if 'failed_count' not in crawl:
-                                                        crawl['failed_count'] = 0
-                                                    crawl['failed_count'] += 1
-                                        ack_ids.append(msg.ack_id)
-                                    except Exception:
-                                        logging.exception('Error Processing message')
-                                if len(ack_ids):
-                                    subscriber.acknowledge(request={
-                                        'subscription': subscription,
-                                        'ack_ids': ack_ids})
-                            except Exception:
-                                logging.exception('Error processing chunk of retries')
-                        else:
-                            done = True
-                    except Exception:
-                        logging.exception('Error processing retry queue')
-                        done = True
-            subscriber.close()
-            if len(publisher_futures):
-                futures.wait(publisher_futures, return_when=futures.ALL_COMPLETED)
-            if retry_count:
-                logging.info("%d tests submitted for retry", retry_count)
-                self.status['last'] = time.time()
-                if 'first_empty' in self.status:
-                    del self.status['first_empty']
-            if failed_count:
-                logging.info("%d tests failed all retries", failed_count)
-        except Exception:
-            logging.exception('Error checking retry queue')
 
     def check_done(self):
         """Check the pub/sub queue length to see the crawl progress"""
@@ -396,6 +402,8 @@ class Crawl(object):
             prefix = 'Dx'
         elif crawl_name == 'Mobile':
             prefix = 'Mx'
+        if TESTING:
+            prefix = 'T' + prefix
         group = int(num // 10000)
         return self.now.strftime('%y%m%d') + '_' + prefix + self.num_to_str(group) + '_' + self.num_to_str(num)
 
