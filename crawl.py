@@ -17,7 +17,7 @@ except BaseException:
     import json
 
 RETRY_COUNT = 2
-MAX_DEPTH = 0
+MAX_DEPTH = 1
 MAX_BREADTH = 1
 TESTING = False
 
@@ -214,7 +214,7 @@ class Crawl(object):
                     os.unlink('crawl.log')
                 except Exception:
                     pass
-                self.update_url_lists()
+                #self.update_url_lists()
                 self.submit_initial_tests()
                 self.save_status()
             except Exception:
