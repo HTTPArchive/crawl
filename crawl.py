@@ -161,6 +161,9 @@ class Crawl(object):
                 if job['metadata']['crawl_depth'] == MAX_DEPTH and 'pubsub_completed_queue' in job:
                     del job['pubsub_completed_queue']
                 job['metadata']['retry_count'] = 0
+                job['metadata']['parent_page_id'] = job['metadata']['page_id']
+                job['metadata']['parent_page_url'] = job['metadata']['tested_url']
+                job['metadata']['parent_page_test_id'] = job['Test ID']
                 links = []
                 try:
                     links = job['results']['1']['FirstView']['1']['crawl_links']
