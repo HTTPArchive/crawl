@@ -164,10 +164,6 @@ class Crawl(object):
                 job['metadata']['parent_page_id'] = job['metadata']['page_id']
                 job['metadata']['parent_page_url'] = job['metadata']['tested_url']
                 job['metadata']['parent_page_test_id'] = job['Test ID']
-                if 'root_page_id' not in job['metadata']:
-                    job['metadata']['root_page_id'] = job['metadata']['page_id']
-                    job['metadata']['root_page_url'] = job['metadata']['tested_url']
-                    job['metadata']['root_page_test_id'] = job['Test ID']
                 links = []
                 try:
                     links = job['results']['1']['FirstView']['1']['crawl_links']
@@ -331,7 +327,10 @@ class Crawl(object):
                                         'tested_url': url,
                                         'layout': crawl_name,
                                         'crawl_depth': 0,
-                                        'link_depth': 0
+                                        'link_depth': 0,
+                                        'root_page_id': index,
+                                        'root_page_url': url,
+                                        'root_page_test_id': test_id
                                     },
                                     'pubsub_retry_queue': retry_queue,
                                     'gcs_test_archive': {
