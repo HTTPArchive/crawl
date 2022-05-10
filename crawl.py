@@ -164,6 +164,10 @@ class Crawl(object):
                 job['metadata']['parent_page_id'] = job['metadata']['page_id']
                 job['metadata']['parent_page_url'] = job['metadata']['tested_url']
                 job['metadata']['parent_page_test_id'] = job['Test ID']
+                if 'root_page_id' not in job['metadata']:
+                    job['metadata']['root_page_id'] = job['metadata']['page_id']
+                    job['metadata']['root_page_url'] = job['metadata']['tested_url']
+                    job['metadata']['root_page_test_id'] = job['Test ID']
                 links = []
                 try:
                     links = job['results']['1']['FirstView']['1']['crawl_links']
