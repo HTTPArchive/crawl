@@ -252,10 +252,9 @@ class Crawl(object):
         batch_settings = pubsub_v1.types.BatchSettings(
             max_messages = 1000,                  # 1000 messages
             max_bytes = 1 * 1000 * 1000 * 100,    # 100MB
-            max_latency = 10,                     # 10s
+            max_latency = 1,                      # 1s
         )
         publisher = pubsub_v1.PublisherClient(batch_settings)
-        publisher_futures = []
         test_queue = publisher.topic_path(self.project, self.crawl_queue)
         pending_count = 0
         total_count = 0
@@ -267,14 +266,10 @@ class Crawl(object):
                         job_str = json.dumps(job)
                         try:
                             publisher.publish(test_queue, job_str.encode())
-                            #publisher_future = publisher.publish(test_queue, job_str.encode())
-                            #publisher_futures.append(publisher_future)
                             pending_count += 1
                             total_count += 1
                             if pending_count >= 1000:
-                                #futures.wait(publisher_futures, return_when=futures.ALL_COMPLETED)
                                 logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
-                                publisher_futures = []
                                 pending_count = 0
                                 with self.status_mutex:
                                     self.status['last'] = time.time()
@@ -284,9 +279,7 @@ class Crawl(object):
             except Exception:
                 pass
             if pending_count:
-                #futures.wait(publisher_futures, return_when=futures.ALL_COMPLETED)
                 logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
-                publisher_futures = []
                 pending_count = 0
                 with self.status_mutex:
                     self.status['last'] = time.time()
