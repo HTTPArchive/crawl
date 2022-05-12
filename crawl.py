@@ -231,16 +231,6 @@ class Crawl(object):
                 self.save_status()
             except Exception:
                 logging.exception('Error starting new crawl')
-        # Configure the log file after we delete the existing one
-        if TESTING:
-            logging.basicConfig(
-                level=logging.DEBUG,
-                format="%(asctime)s.%(msecs)03d - %(message)s", datefmt="%H:%M:%S")
-        else:
-            logging.basicConfig(
-                level=logging.INFO,
-                filename='crawl.log',
-                format="%(asctime)s.%(msecs)03d - %(message)s", datefmt="%H:%M:%S")
 
     def update_url_lists(self):
         """Download the lastes CrUX URL lists"""
@@ -521,6 +511,15 @@ def run_once():
         os._exit(0)
 
 if __name__ == '__main__':
+    if TESTING:
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="%(asctime)s.%(msecs)03d - %(message)s", datefmt="%H:%M:%S")
+    else:
+        logging.basicConfig(
+            level=logging.INFO,
+            filename='crawl.log',
+            format="%(asctime)s.%(msecs)03d - %(message)s", datefmt="%H:%M:%S")
     run_once()
     crawl = Crawl()
     crawl.run()
