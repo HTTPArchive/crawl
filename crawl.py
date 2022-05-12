@@ -274,6 +274,8 @@ class Crawl(object):
                                 logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
                                 publisher_futures = []
                                 pending_count = 0
+                                with self.status_mutex:
+                                    self.status['last'] = time.time()
                         except Exception:
                             logging.exception
                     self.job_queue.task_done()
@@ -284,9 +286,8 @@ class Crawl(object):
                 logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
                 publisher_futures = []
                 pending_count = 0
-        if total_count:
-            with self.status_mutex:
-                self.status['last'] = time.time()
+                with self.status_mutex:
+                    self.status['last'] = time.time()
         publisher.stop()
         logging.debug('Submit thread complete')
 
