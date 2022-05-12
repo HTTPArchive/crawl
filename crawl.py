@@ -266,12 +266,13 @@ class Crawl(object):
                     if job is not None:
                         job_str = json.dumps(job)
                         try:
-                            publisher_future = publisher.publish(test_queue, job_str.encode())
-                            publisher_futures.append(publisher_future)
+                            publisher.publish(test_queue, job_str.encode())
+                            #publisher_future = publisher.publish(test_queue, job_str.encode())
+                            #publisher_futures.append(publisher_future)
                             pending_count += 1
                             total_count += 1
                             if pending_count >= 1000:
-                                futures.wait(publisher_futures, return_when=futures.ALL_COMPLETED)
+                                #futures.wait(publisher_futures, return_when=futures.ALL_COMPLETED)
                                 logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
                                 publisher_futures = []
                                 pending_count = 0
@@ -282,8 +283,8 @@ class Crawl(object):
                     self.job_queue.task_done()
             except Exception:
                 pass
-            if len(publisher_futures):
-                futures.wait(publisher_futures, return_when=futures.ALL_COMPLETED)
+            if pending_count:
+                #futures.wait(publisher_futures, return_when=futures.ALL_COMPLETED)
                 logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
                 publisher_futures = []
                 pending_count = 0
