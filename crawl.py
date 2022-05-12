@@ -153,7 +153,10 @@ class Crawl(object):
                             crawl['failed_count'] += 1
         except Exception:
             logging.exception('Error processing pubsub job')
-        message.ack()
+        try:
+            message.ack()
+        except Exception:
+            pass
 
     def crawl_job(self, message):
         """Pubsub callback for jobs that completed (for crawling deeper into)"""
@@ -210,7 +213,10 @@ class Crawl(object):
                 logging.debug('Invalid crawl job')
         except Exception:
             logging.exception('Error processing pubsub job')
-        message.ack()
+        try:
+            message.ack()
+        except Exception:
+            pass
 
     def start_crawl(self):
         """Start a new crawl if necessary"""
