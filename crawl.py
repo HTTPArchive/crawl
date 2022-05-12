@@ -71,7 +71,7 @@ class Crawl(object):
         if os.path.exists(crux_file):
             with open(crux_file, 'rt') as f:
                 self.crux_keys = json.load(f)
-        self.job_queue = multiprocessing.JoinableQueue(maxsize=10000)
+        self.job_queue = multiprocessing.JoinableQueue(maxsize=1000)
 
     def run(self):
         """Main Crawl entrypoint"""
@@ -91,7 +91,7 @@ class Crawl(object):
             failed_future = failed_subscriber.subscribe(failed_subscription, callback=self.retry_job, flow_control=failed_flow_control, await_callbacks_on_shutdown=True)
             completed_subscriber = pubsub_v1.SubscriberClient()
             completed_subscription = completed_subscriber.subscription_path(self.project, self.completed_queue)
-            completed_flow_control = pubsub_v1.types.FlowControl(max_messages=10)
+            completed_flow_control = pubsub_v1.types.FlowControl(max_messages=20)
             completed_future = completed_subscriber.subscribe(completed_subscription, callback=self.crawl_job, flow_control=completed_flow_control, await_callbacks_on_shutdown=True)
 
             # Pump jobs for 4 minutes
@@ -137,7 +137,6 @@ class Crawl(object):
         """Pubsub callback for jobs that may need to be retried"""
         try:
             job = json.loads(message.data.decode('utf-8'))
-            logging.debug('Retry test request: %s', json.dumps(job))
             if job is not None and 'metadata' in job and 'layout' in job['metadata']:
                 crawl_name = job['metadata']['layout']
                 if 'retry_count' not in job['metadata']:
@@ -161,7 +160,6 @@ class Crawl(object):
         try:
             import copy
             job = json.loads(message.data.decode('utf-8'))
-            logging.debug('Completed job: %s', json.dumps(job))
             if job is not None and 'metadata' in job and 'layout' in job['metadata'] and \
                     'crawl_depth' in job['metadata'] and job['metadata']['crawl_depth'] < MAX_DEPTH and \
                     'results' in job:
@@ -182,7 +180,6 @@ class Crawl(object):
                 visited = job['metadata'].get('visited', [job['url']])
                 width = 0
                 crawl_links = []
-                logging.debug('Visited: %s', json.dumps(visited))
                 if links:
                     for link in links:
                         if link not in visited:
@@ -191,7 +188,6 @@ class Crawl(object):
                                 break
                             crawl_links.append(link)
                             visited.append(link)
-                logging.debug('Crawl Links: %s', json.dumps(crawl_links))
                 job['metadata']['visited'] = visited
                 # Create the new jobs
                 width = 0
@@ -208,7 +204,6 @@ class Crawl(object):
                     new_job['metadata']['link_depth'] = width
                     new_job['metadata']['page_id'] = page_id
                     new_job['metadata']['tested_url'] = link
-                    logging.debug('Queueing crawl job: %s', json.dumps(new_job))
                     self.job_queue.put(new_job, block=True, timeout=300)
                     width += 1
             else:
@@ -263,7 +258,6 @@ class Crawl(object):
                     job = self.job_queue.get(block=True, timeout=5)
                     if job is not None:
                         job_str = json.dumps(job)
-                        logging.debug('Submitting job: %s', job_str)
                         try:
                             publisher_future = publisher.publish(test_queue, job_str.encode())
                             publisher_futures.append(publisher_future)
