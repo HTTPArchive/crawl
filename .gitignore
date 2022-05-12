@@ -133,3 +133,4 @@ data/
 .vscode/launch.json
 crux_keys.json
 crawl.log
+crawl.py.lock

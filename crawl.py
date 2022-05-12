@@ -504,8 +504,8 @@ lock_handle = None
 def run_once():
     """Use a non-blocking lock on the current code file to make sure multiple instance aren't running"""
     global lock_handle
-    lock_handle = open(os.path.realpath(__file__),'r')
     try:
+        lock_handle = open(os.path.realpath(__file__) + '.lock','w')
         fcntl.flock(lock_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except:
         logging.critical('Already running')
