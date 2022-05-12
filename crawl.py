@@ -263,7 +263,7 @@ class Crawl(object):
                             publisher_futures.append(publisher_future)
                             pending_count += 1
                             total_count += 1
-                            if pending_count >= 10000:
+                            if pending_count >= 1000:
                                 futures.wait(publisher_futures, return_when=futures.ALL_COMPLETED)
                                 logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
                                 publisher_futures = []
