@@ -83,17 +83,13 @@ class Crawl(object):
             from google.cloud import pubsub_v1
             completed_subscriber = pubsub_v1.SubscriberClient()
             completed_subscription = completed_subscriber.subscription_path(self.project, self.completed_queue)
-            #completed_flow_control = pubsub_v1.types.FlowControl(max_messages=15)
-            #completed_future = completed_subscriber.subscribe(completed_subscription, callback=self.crawl_job, flow_control=completed_flow_control, await_callbacks_on_shutdown=True)
             completed_future = completed_subscriber.subscribe(completed_subscription, callback=self.crawl_job, await_callbacks_on_shutdown=True)
             retry_subscriber = pubsub_v1.SubscriberClient()
             retry_subscription = retry_subscriber.subscription_path(self.project, self.retry_queue)
-            retry_flow_control = pubsub_v1.types.FlowControl(max_messages=5)
-            retry_future = retry_subscriber.subscribe(retry_subscription, callback=self.retry_job, flow_control=retry_flow_control, await_callbacks_on_shutdown=True)
+            retry_future = retry_subscriber.subscribe(retry_subscription, callback=self.retry_job, await_callbacks_on_shutdown=True)
             failed_subscriber = pubsub_v1.SubscriberClient()
             failed_subscription = failed_subscriber.subscription_path(self.project, self.failed_queue)
-            failed_flow_control = pubsub_v1.types.FlowControl(max_messages=1)
-            failed_future = failed_subscriber.subscribe(failed_subscription, callback=self.retry_job, flow_control=failed_flow_control, await_callbacks_on_shutdown=True)
+            failed_future = failed_subscriber.subscribe(failed_subscription, callback=self.retry_job, await_callbacks_on_shutdown=True)
 
             # Pump jobs for 9 minutes
             time.sleep(540)
