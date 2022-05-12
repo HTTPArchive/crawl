@@ -91,11 +91,11 @@ class Crawl(object):
             failed_future = failed_subscriber.subscribe(failed_subscription, callback=self.retry_job, flow_control=failed_flow_control, await_callbacks_on_shutdown=True)
             completed_subscriber = pubsub_v1.SubscriberClient()
             completed_subscription = completed_subscriber.subscription_path(self.project, self.completed_queue)
-            completed_flow_control = pubsub_v1.types.FlowControl(max_messages=20)
+            completed_flow_control = pubsub_v1.types.FlowControl(max_messages=10)
             completed_future = completed_subscriber.subscribe(completed_subscription, callback=self.crawl_job, flow_control=completed_flow_control, await_callbacks_on_shutdown=True)
 
-            # Pump jobs for 4 minutes
-            time.sleep(240)
+            # Pump jobs for 9 minutes
+            time.sleep(540)
 
             # Cancel the subscriptions and drain any work
             try:
