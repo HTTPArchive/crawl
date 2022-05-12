@@ -71,7 +71,7 @@ class Crawl(object):
         if os.path.exists(crux_file):
             with open(crux_file, 'rt') as f:
                 self.crux_keys = json.load(f)
-        self.job_queue = multiprocessing.JoinableQueue(maxsize=1000)
+        self.job_queue = multiprocessing.JoinableQueue(maxsize=10000)
 
     def run(self):
         """Main Crawl entrypoint"""
@@ -101,9 +101,9 @@ class Crawl(object):
             retry_future.cancel()
             failed_future.cancel()
             completed_future.cancel()
-            retry_future.result(timeout=300)
-            failed_future.result(timeout=300)
-            completed_future.result(timeout=300)
+            retry_future.result(timeout=60)
+            failed_future.result(timeout=60)
+            completed_future.result(timeout=60)
 
             # Check the status of the overall crawl
             with self.status_mutex:
