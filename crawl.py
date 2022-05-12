@@ -132,6 +132,7 @@ class Crawl(object):
                     logging.info('Done')
         self.must_exit = True
         self.job_thread.join(timeout=600)
+        self.save_status()
 
     def retry_job(self, message):
         """Pubsub callback for jobs that may need to be retried"""
@@ -227,7 +228,7 @@ class Crawl(object):
                     os.unlink('crawl.log')
                 except Exception:
                     pass
-                #self.update_url_lists()
+                self.update_url_lists()
                 self.submit_initial_tests()
                 self.save_status()
             except Exception:
