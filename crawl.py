@@ -252,7 +252,7 @@ class Crawl(object):
         batch_settings = pubsub_v1.types.BatchSettings(
             max_messages = 1000,                  # 1000 messages
             max_bytes = 1 * 1000 * 1000 * 100,    # 100MB
-            max_latency = 0.1,                    # 100ms
+            max_latency = 10,                     # 10s
         )
         publisher = pubsub_v1.PublisherClient(batch_settings)
         publisher_futures = []
