@@ -98,12 +98,21 @@ class Crawl(object):
             time.sleep(240)
 
             # Cancel the subscriptions and drain any work
-            retry_future.cancel()
-            failed_future.cancel()
-            completed_future.cancel()
-            retry_future.result(timeout=60)
-            failed_future.result(timeout=60)
-            completed_future.result(timeout=60)
+            try:
+                retry_future.cancel()
+                retry_future.result(timeout=60)
+            except Exception:
+                pass
+            try:
+                failed_future.cancel()
+                failed_future.result(timeout=60)
+            except Exception:
+                pass
+            try:
+                completed_future.cancel()
+                completed_future.result(timeout=60)
+            except Exception:
+                pass
 
             # Check the status of the overall crawl
             with self.status_mutex:
