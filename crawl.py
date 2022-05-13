@@ -79,40 +79,27 @@ class Crawl(object):
         self.job_thread.start()
         self.start_crawl()
         if not self.status['done']:
-            # Start subscriptions for the retry and failed queues
-            from google.cloud import pubsub_v1
-            completed_subscriber = pubsub_v1.SubscriberClient()
-            completed_subscription = completed_subscriber.subscription_path(self.project, self.completed_queue)
-            completed_flow_control = pubsub_v1.types.FlowControl(max_messages=15)
-            completed_future = completed_subscriber.subscribe(completed_subscription, callback=self.crawl_job, flow_control=completed_flow_control, await_callbacks_on_shutdown=True)
-            retry_subscriber = pubsub_v1.SubscriberClient()
-            retry_subscription = retry_subscriber.subscription_path(self.project, self.retry_queue)
-            retry_flow_control = pubsub_v1.types.FlowControl(max_messages=5)
-            retry_future = retry_subscriber.subscribe(retry_subscription, callback=self.retry_job, flow_control=retry_flow_control, await_callbacks_on_shutdown=True)
-            failed_subscriber = pubsub_v1.SubscriberClient()
-            failed_subscription = failed_subscriber.subscription_path(self.project, self.failed_queue)
-            failed_flow_control = pubsub_v1.types.FlowControl(max_messages=1)
-            failed_future = failed_subscriber.subscribe(failed_subscription, callback=self.retry_job, flow_control=failed_flow_control, await_callbacks_on_shutdown=True)
+            threads = []
+            thread = threading.Thread(target=self.retry_thread)
+            thread.start()
+            threads.append(thread)
+            thread = threading.Thread(target=self.failed_thread)
+            thread.start()
+            threads.append(thread)
+            for _ in range(10):
+                thread = threading.Thread(target=self.completed_thread)
+                thread.start()
+                threads.append(thread)
 
             # Pump jobs for 9 minutes
             time.sleep(540)
 
-            # Cancel the subscriptions and drain any work
-            try:
-                retry_future.cancel()
-                retry_future.result(timeout=60)
-            except Exception:
-                pass
-            try:
-                failed_future.cancel()
-                failed_future.result(timeout=60)
-            except Exception:
-                pass
-            try:
-                completed_future.cancel()
-                completed_future.result(timeout=60)
-            except Exception:
-                pass
+            # Wait for the subscriptions to exit
+            for thread in threads:
+                try:
+                    thread.join(timeout=60)
+                except Exception:
+                    pass
 
             # Check the status of the overall crawl
             with self.status_mutex:
@@ -133,6 +120,54 @@ class Crawl(object):
         self.must_exit = True
         self.job_thread.join(timeout=600)
         self.save_status()
+
+    def retry_thread(self):
+        """Thread for retry queue subscription"""
+        from google.cloud import pubsub_v1
+        subscriber = pubsub_v1.SubscriberClient()
+        subscription = subscriber.subscription_path(self.project, self.retry_queue)
+        flow_control = pubsub_v1.types.FlowControl(max_messages=5)
+        subscription_future = subscriber.subscribe(subscription, callback=self.retry_job, flow_control=flow_control, await_callbacks_on_shutdown=True)
+        with subscriber:
+            try:
+                subscription_future.result(timeout=540)
+            except TimeoutError:
+                subscription_future.cancel()
+                subscription_future.result(timeout=30)
+            except Exception:
+                logging.exception('Error waiting on subscription')
+
+    def failed_thread(self):
+        """Thread for falied queue subscription"""
+        from google.cloud import pubsub_v1
+        subscriber = pubsub_v1.SubscriberClient()
+        subscription = subscriber.subscription_path(self.project, self.failed_queue)
+        flow_control = pubsub_v1.types.FlowControl(max_messages=1)
+        subscription_future = subscriber.subscribe(subscription, callback=self.retry_job, flow_control=flow_control, await_callbacks_on_shutdown=True)
+        with subscriber:
+            try:
+                subscription_future.result(timeout=540)
+            except TimeoutError:
+                subscription_future.cancel()
+                subscription_future.result(timeout=30)
+            except Exception:
+                logging.exception('Error waiting on subscription')
+
+    def completed_thread(self):
+        """Thread for completed queue subscription"""
+        from google.cloud import pubsub_v1
+        subscriber = pubsub_v1.SubscriberClient()
+        subscription = subscriber.subscription_path(self.project, self.completed_queue)
+        flow_control = pubsub_v1.types.FlowControl(max_messages=15)
+        subscription_future = subscriber.subscribe(subscription, callback=self.crawl_job, flow_control=flow_control, await_callbacks_on_shutdown=True)
+        with subscriber:
+            try:
+                subscription_future.result(timeout=540)
+            except TimeoutError:
+                subscription_future.cancel()
+                subscription_future.result(timeout=30)
+            except Exception:
+                logging.exception('Error waiting on subscription')
 
     def retry_job(self, message):
         """Pubsub callback for jobs that may need to be retried"""
