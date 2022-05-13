@@ -238,7 +238,7 @@ class Crawl(object):
                         self.status['crawls'][crawl_name]['url_count'] += 1
                     new_job = copy.deepcopy(job)
                     del new_job['results']
-                    new_job['Test ID'] = self.generate_test_id(crawl_name, page_id)
+                    new_job['Test ID'] = '{0}l{1}'.format(job['metadata']['parent_page_test_id'], width)
                     new_job['url'] = link
                     new_job['metadata']['link_depth'] = width
                     new_job['metadata']['page_id'] = page_id
