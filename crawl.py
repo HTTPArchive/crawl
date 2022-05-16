@@ -80,9 +80,10 @@ class Crawl(object):
         self.start_crawl()
         if not self.status['done']:
             threads = []
-            thread = threading.Thread(target=self.retry_thread)
-            thread.start()
-            threads.append(thread)
+            for _ in range(2):
+                thread = threading.Thread(target=self.retry_thread)
+                thread.start()
+                threads.append(thread)
             thread = threading.Thread(target=self.failed_thread)
             thread.start()
             threads.append(thread)
