@@ -126,7 +126,7 @@ class Crawl(object):
         from google.cloud import pubsub_v1
         subscriber = pubsub_v1.SubscriberClient()
         subscription = subscriber.subscription_path(self.project, self.retry_queue)
-        flow_control = pubsub_v1.types.FlowControl(max_messages=10)
+        flow_control = pubsub_v1.types.FlowControl(max_messages=15)
         subscription_future = subscriber.subscribe(subscription, callback=self.retry_job, flow_control=flow_control, await_callbacks_on_shutdown=True)
         with subscriber:
             try:
