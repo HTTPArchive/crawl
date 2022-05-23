@@ -1,8 +1,8 @@
 """
 Main entry point for managing the monthly crawl
 """
-from concurrent import futures
 from datetime import datetime
+from urllib.parse import urlparse
 import fcntl
 import logging
 import queue
@@ -224,20 +224,25 @@ class Crawl(object):
                 crawl_links = []
                 max_children = MAX_BREADTH * MAX_DEPTH
                 root_page = job['metadata']['root_page_id']
+                skip_extensions = ['.jpg', '.jpeg', '.gif', '.png', '.webp', '.avif', '.webm', '.pdf', '.tiff', '.zip']
                 if links:
                     for link in links:
-                        if link not in visited:
-                            with self.status_mutex:
-                                if root_page not in self.crawled:
-                                    self.crawled[root_page] = 0
-                                self.crawled[root_page] += 1
-                                if self.crawled[root_page] > max_children:
+                        try:
+                            _, extension = os.path.splitext(urlparse(link).path.lower())
+                            if extension not in skip_extensions and link not in visited:
+                                with self.status_mutex:
+                                    if root_page not in self.crawled:
+                                        self.crawled[root_page] = 0
+                                    self.crawled[root_page] += 1
+                                    if self.crawled[root_page] > max_children:
+                                        break
+                                width += 1
+                                if width > MAX_BREADTH:
                                     break
-                            width += 1
-                            if width > MAX_BREADTH:
-                                break
-                            crawl_links.append(link)
-                            visited.append(link)
+                                crawl_links.append(link)
+                                visited.append(link)
+                        except Exception:
+                            logging.exception('Error parsing URL')
                 job['metadata']['visited'] = visited
                 # Create the new jobs
                 width = 0
@@ -313,6 +318,7 @@ class Crawl(object):
                         job_str = json.dumps(job)
                         try:
                             publisher.publish(test_queue, job_str.encode())
+                            logging.debug(job_str)
                             pending_count += 1
                             total_count += 1
                             if pending_count >= 1000:
