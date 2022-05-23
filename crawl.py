@@ -64,7 +64,9 @@ class Crawl(object):
         self.previous_count = None
         self.previous_time = None
         self.status_file = os.path.join(self.data_path, 'status.json')
+        self.crawled_file = os.path.join(self.data_path, 'crawled.json')
         self.status_mutex = threading.Lock()
+        self.crawled = None
         self.load_status()
         self.crux_keys = []
         crux_file = os.path.join(self.root_path, 'crux_keys.json')
@@ -220,9 +222,17 @@ class Crawl(object):
                 visited = job['metadata'].get('visited', [job['url']])
                 width = 0
                 crawl_links = []
+                max_children = MAX_BREADTH * MAX_DEPTH
+                root_page = job['metadata']['root_page_id']
                 if links:
                     for link in links:
                         if link not in visited:
+                            with self.status_mutex:
+                                if root_page not in self.crawled:
+                                    self.crawled[root_page] = 0
+                                self.crawled[root_page] += 1
+                                if self.crawled[root_page] > max_children:
+                                    break
                             width += 1
                             if width > MAX_BREADTH:
                                 break
@@ -264,6 +274,7 @@ class Crawl(object):
                     os.unlink('crawl.log')
                 except Exception:
                     pass
+                self.crawled = {}
                 self.update_url_lists()
                 self.submit_initial_tests()
                 self.save_status()
@@ -498,6 +509,14 @@ class Crawl(object):
                 self.previous_count = self.status['count']
             if 'tm' in self.status:
                 self.previous_time = self.status['tm']
+        if os.path.exists(self.crawled_file):
+            try:
+                with open(self.crawled_file, 'rt') as f:
+                    self.crawled = json.load(f)
+            except Exception:
+                logging.exception('Error loading status')
+        if self.crawled is None:
+            self.crawled = {}
 
 
     def save_status(self):
@@ -508,6 +527,11 @@ class Crawl(object):
         except Exception:
             logging.exception('Error saving status')
         logging.info("Status: %s", json.dumps(self.status, sort_keys=True))
+        try:
+            with open(self.crawled_file, 'wt') as f:
+                json.dump(self.crawled, f)
+        except Exception:
+            logging.exception('Error saving crawled history')
 
     def num_to_str(self, num):
         """encode a number as an alphanum sequence"""
