@@ -13,6 +13,7 @@
     "lighthouse":1,
     "lighthouseTrace":1,
     "v8rcs":1,
+    "bodies":1,
     "axe":0,
     "throttle_cpu":8,
     "dpr":3,

@@ -12,6 +12,7 @@
     "lighthouse":1,
     "lighthouseTrace":1,
     "v8rcs":1,
+    "bodies":1,
     "axe":0,
     "browser_width":1920,
     "browser_height":1080,
