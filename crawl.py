@@ -136,7 +136,7 @@ class Crawl(object):
         subscription_future = subscriber.subscribe(subscription, callback=self.retry_job, flow_control=flow_control, await_callbacks_on_shutdown=True)
         with subscriber:
             try:
-                subscription_future.result(timeout=540)
+                subscription_future.result(timeout=RUN_TIME)
             except TimeoutError:
                 subscription_future.cancel()
                 subscription_future.result(timeout=30)
@@ -152,7 +152,7 @@ class Crawl(object):
         subscription_future = subscriber.subscribe(subscription, callback=self.retry_job, flow_control=flow_control, await_callbacks_on_shutdown=True)
         with subscriber:
             try:
-                subscription_future.result(timeout=540)
+                subscription_future.result(timeout=RUN_TIME)
             except TimeoutError:
                 subscription_future.cancel()
                 subscription_future.result(timeout=30)
@@ -168,7 +168,7 @@ class Crawl(object):
         subscription_future = subscriber.subscribe(subscription, callback=self.crawl_job, flow_control=flow_control, await_callbacks_on_shutdown=True)
         with subscriber:
             try:
-                subscription_future.result(timeout=540)
+                subscription_future.result(timeout=RUN_TIME)
             except TimeoutError:
                 subscription_future.cancel()
                 subscription_future.result(timeout=30)
