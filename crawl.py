@@ -124,6 +124,8 @@ class Crawl(object):
         self.must_exit = True
         self.job_thread.join(timeout=600)
         self.save_status()
+        if not self.status['done']:
+            self.save_crawled()
 
     def retry_thread(self):
         """Thread for retry queue subscription"""
@@ -286,6 +288,8 @@ class Crawl(object):
                 self.save_status()
             except Exception:
                 logging.exception('Error starting new crawl')
+        elif self.status is not None and not self.status.get('done'):
+            self.load_crawled()
 
     def update_url_lists(self):
         """Download the lastes CrUX URL lists"""
@@ -503,7 +507,6 @@ class Crawl(object):
 
     def load_status(self):
         """Load the status.json"""
-        logging.info('Loading status...')
         if os.path.exists(self.status_file):
             try:
                 with open(self.status_file, 'rt') as f:
@@ -517,6 +520,9 @@ class Crawl(object):
                 self.previous_count = self.status['count']
             if 'tm' in self.status:
                 self.previous_time = self.status['tm']
+
+    def load_crawled(self):
+        logging.info('Loading crawled...')
         if os.path.exists(self.crawled_file):
             try:
                 with open(self.crawled_file, 'rt') as f:
@@ -525,24 +531,25 @@ class Crawl(object):
                 logging.exception('Error loading status')
         if self.crawled is None:
             self.crawled = {}
-        logging.info('Loading status complete')
+        logging.info('Loading crawled complete')
 
+    def save_crawled(self):
+        logging.info('Saving crawled...')
+        try:
+            with open(self.crawled_file, 'wt') as f:
+                json.dump(self.crawled, f)
+        except Exception:
+            logging.exception('Error saving crawled history')
+        logging.info('Saving crawled complete')
 
     def save_status(self):
         """Save the crawls status file"""
-        logging.info('Saving status...')
         try:
             with open(self.status_file, 'wt') as f:
                 json.dump(self.status, f, indent=4, sort_keys=True)
         except Exception:
             logging.exception('Error saving status')
         logging.info("Status: %s", json.dumps(self.status, sort_keys=True))
-        try:
-            with open(self.crawled_file, 'wt') as f:
-                json.dump(self.crawled, f)
-        except Exception:
-            logging.exception('Error saving crawled history')
-        logging.info('Saving status complete')
 
     def num_to_str(self, num):
         """encode a number as an alphanum sequence"""
