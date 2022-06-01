@@ -16,7 +16,7 @@ try:
 except BaseException:
     import json
 
-RUN_TIME = 3600
+RUN_TIME = 900
 RETRY_COUNT = 2
 MAX_DEPTH = 1
 MAX_BREADTH = 1
