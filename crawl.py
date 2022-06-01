@@ -16,6 +16,7 @@ try:
 except BaseException:
     import json
 
+RUN_TIME = 900
 RETRY_COUNT = 2
 MAX_DEPTH = 1
 MAX_BREADTH = 1
@@ -94,8 +95,8 @@ class Crawl(object):
                 thread.start()
                 threads.append(thread)
 
-            # Pump jobs for 9 minutes
-            time.sleep(540)
+            # Pump jobs until time is up
+            time.sleep(RUN_TIME)
 
             # Wait for the subscriptions to exit
             for thread in threads:
@@ -502,6 +503,7 @@ class Crawl(object):
 
     def load_status(self):
         """Load the status.json"""
+        logging.info('Loading status...')
         if os.path.exists(self.status_file):
             try:
                 with open(self.status_file, 'rt') as f:
@@ -523,10 +525,12 @@ class Crawl(object):
                 logging.exception('Error loading status')
         if self.crawled is None:
             self.crawled = {}
+        logging.info('Loading status complete')
 
 
     def save_status(self):
         """Save the crawls status file"""
+        logging.info('Saving status...')
         try:
             with open(self.status_file, 'wt') as f:
                 json.dump(self.status, f, indent=4, sort_keys=True)
@@ -538,6 +542,7 @@ class Crawl(object):
                 json.dump(self.crawled, f)
         except Exception:
             logging.exception('Error saving crawled history')
+        logging.info('Saving status complete')
 
     def num_to_str(self, num):
         """encode a number as an alphanum sequence"""
