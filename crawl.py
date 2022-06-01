@@ -500,6 +500,7 @@ class Crawl(object):
                             logging.info('Uploaded done file to gs://%s/%s', self.bucket, gcs_path)
                         logging.info('Crawl complete')
                         self.status['done'] = True
+                        self.crawled = {}
                     except Exception:
                         logging.exception('Error marking crawls as done')
         except Exception:
