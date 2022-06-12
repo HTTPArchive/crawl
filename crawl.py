@@ -83,7 +83,7 @@ class Crawl(object):
         self.start_crawl()
         if not self.status['done']:
             threads = []
-            for _ in range(2):
+            for _ in range(10):
                 thread = threading.Thread(target=self.retry_thread)
                 thread.start()
                 threads.append(thread)
