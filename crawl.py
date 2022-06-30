@@ -587,6 +587,7 @@ def run_once():
         os._exit(0)
 
 if __name__ == '__main__':
+    """
     if TESTING:
         logging.basicConfig(
             level=logging.DEBUG,
@@ -599,6 +600,6 @@ if __name__ == '__main__':
     run_once()
     crawl = Crawl()
     crawl.run()
-
+    """
     # Force a hard exit so unclean threads can't hang the process
     os._exit(0)
