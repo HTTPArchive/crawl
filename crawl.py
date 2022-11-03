@@ -216,6 +216,11 @@ class Crawl(object):
                 job['metadata']['parent_page_id'] = job['metadata']['page_id']
                 job['metadata']['parent_page_url'] = job['metadata']['tested_url']
                 job['metadata']['parent_page_test_id'] = job['Test ID']
+                parent_origin = 'none'
+                try:
+                    parent_origin = urlparse(job['metadata']['parent_page_url']).hostname.lower()
+                except Exception:
+                    logging.exception('Error extracting origin from parent URL')
                 links = []
                 try:
                     links = job['results']['1']['FirstView']['1']['crawl_links']
@@ -231,8 +236,9 @@ class Crawl(object):
                 if links:
                     for link in links:
                         try:
+                            link_origin = urlparse(link).hostname.lower()
                             _, extension = os.path.splitext(urlparse(link).path.lower())
-                            if extension not in skip_extensions and link not in visited:
+                            if link_origin == parent_origin and extension not in skip_extensions and link not in visited:
                                 with self.status_mutex:
                                     if root_page not in self.crawled:
                                         self.crawled[root_page] = 0
