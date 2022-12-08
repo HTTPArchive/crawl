@@ -52,6 +52,7 @@ class Crawl(object):
         self.retry_queue = 'crawl-queue-retry'
         self.failed_queue = 'crawl-queue-failed'
         self.completed_queue = 'crawl-queue-completed'
+        self.done_queue = 'crawl-complete'
         self.test_archive = 'results'
         self.har_archive = 'crawls'
         if TESTING:
@@ -338,7 +339,7 @@ class Crawl(object):
                                 with self.status_mutex:
                                     self.status['last'] = time.time()
                         except Exception:
-                            logging.exception
+                            logging.exception('Error publishing test to queue')
                     self.job_queue.task_done()
             except Exception:
                 pass
@@ -496,7 +497,9 @@ class Crawl(object):
                 logging.info("%0.1fs since last activity and %0.1fs since the queue became empty.", elapsed_activity, elapsed_empty)
                 if elapsed_activity > 3600 and elapsed_empty > 3600:
                     try:
-                        from google.cloud import storage
+                        from google.cloud import storage, pubsub_v1
+                        publisher = pubsub_v1.PublisherClient()
+                        done_queue = publisher.topic_path(self.project, self.done_queue)
                         client = storage.Client()
                         bucket = client.get_bucket(self.bucket)
                         for crawl_name in self.crawls:
@@ -504,6 +507,9 @@ class Crawl(object):
                             blob = bucket.blob(gcs_path)
                             blob.upload_from_string('')
                             logging.info('Uploaded done file to gs://%s/%s', self.bucket, gcs_path)
+                            message = 'gs://{}/{}/{}'.format(self.bucket, self.har_archive, self.crawls[crawl_name]['crawl_name'])
+                            publisher.publish(done_queue, message.encode())
+                            logging.debug('%s posted to done queue %s', message, self.done_queue)
                         logging.info('Crawl complete')
                         self.status['done'] = True
                         self.crawled = {}
