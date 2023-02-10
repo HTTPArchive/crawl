@@ -61,6 +61,7 @@ class Crawl(object):
             self.failed_queue += '-test'
             self.completed_queue += '-test'
             self.har_archive += '-test'
+            self.done_queue += '-test'
         self.status = None
         self.previous_pending = None
         self.previous_count = None
@@ -502,12 +503,17 @@ class Crawl(object):
                         done_queue = publisher.topic_path(self.project, self.done_queue)
                         client = storage.Client()
                         bucket = client.get_bucket(self.bucket)
+                        message = ''
                         for crawl_name in self.crawls:
                             gcs_path = self.har_archive + '/' + self.crawls[crawl_name]['crawl_name'] + '/done'
                             blob = bucket.blob(gcs_path)
                             blob.upload_from_string('')
                             logging.info('Uploaded done file to gs://%s/%s', self.bucket, gcs_path)
-                            message = 'gs://{}/{}/{}'.format(self.bucket, self.har_archive, self.crawls[crawl_name]['crawl_name'])
+                            if not TESTING:
+                                if len(message):
+                                    message += ','
+                                message += 'gs://{}/{}/{}'.format(self.bucket, self.har_archive, self.crawls[crawl_name]['crawl_name'])
+                        if len(message):
                             publisher.publish(done_queue, message.encode())
                             logging.debug('%s posted to done queue %s', message, self.done_queue)
                         logging.info('Crawl complete')
