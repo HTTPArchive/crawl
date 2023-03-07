@@ -515,7 +515,7 @@ class Crawl(object):
                                 message += 'gs://{}/{}/{}'.format(self.bucket, self.har_archive, self.crawls[crawl_name]['crawl_name'])
                         if len(message):
                             publisher.publish(done_queue, message.encode())
-                            logging.debug('%s posted to done queue %s', message, self.done_queue)
+                            logging.info('%s posted to done queue %s', message, self.done_queue)
                         logging.info('Crawl complete')
                         self.status['done'] = True
                         self.crawled = {}
