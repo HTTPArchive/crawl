@@ -1,7 +1,7 @@
 """
 Main entry point for managing the monthly crawl
 """
-from datetime import datetime
+from datetime import datetime,timezone
 from urllib.parse import urlparse
 import fcntl
 import logging
@@ -26,17 +26,52 @@ class Crawl(object):
     """Main agent workflow"""
     def __init__(self):
         self.must_exit = False
-        self.now = datetime.now()
+        self.now = datetime.now(tz=timezone.utc)
         self.root_path = os.path.abspath(os.path.dirname(__file__))
         self.data_path = os.path.join(self.root_path, 'data')
+        self.bq_client = None
         self.crawls = {
             'Desktop': {
-                'urls_file': 'urls/latest_crux_desktop.csv',
-                'crawl_name': self.now.strftime('chrome-%b_1_%Y')
+                'urls_file': 'urls/desktop/',
+                'crawl_name': self.now.strftime('chrome-%b_1_%Y'),
+                'urls_query': """
+                                #standardSQL
+                                EXPORT DATA OPTIONS(
+                                    uri='gs://httparchive/urls/desktop/*.csv',
+                                    format='CSV',
+                                    overwrite=true) AS
+                                SELECT DISTINCT
+                                    experimental.popularity.rank,
+                                    CONCAT(origin, '/') AS url
+                                FROM
+                                    `chrome-ux-report.experimental.global`
+                                WHERE
+                                    yyyymm > 0 AND # Satisfy the linter
+                                    yyyymm IN (SELECT DISTINCT yyyymm FROM `chrome-ux-report.experimental.global` WHERE yyyymm > 0 ORDER BY yyyymm DESC LIMIT 1) AND (
+                                    form_factor.name = 'desktop' OR
+                                    form_factor.name IS NULL)
+                              """
             },
             'Mobile': {
-                'urls_file': 'urls/latest_crux_mobile.csv',
-                'crawl_name': self.now.strftime('android-%b_1_%Y')
+                'urls_file': 'urls/mobile/',
+                'crawl_name': self.now.strftime('android-%b_1_%Y'),
+                'urls_query': """
+                                #standardSQL
+                                EXPORT DATA OPTIONS(
+                                    uri='gs://httparchive/urls/mobile/*.csv',
+                                    format='CSV',
+                                    overwrite=true) AS
+                                SELECT DISTINCT
+                                    experimental.popularity.rank,
+                                    CONCAT(origin, '/') AS url
+                                FROM
+                                    `chrome-ux-report.experimental.global`
+                                WHERE
+                                    yyyymm > 0 AND # Satisfy the linter
+                                    yyyymm IN (SELECT DISTINCT yyyymm FROM `chrome-ux-report.experimental.global` WHERE yyyymm > 0 ORDER BY yyyymm DESC LIMIT 1) AND (
+                                    form_factor.name != 'desktop' OR
+                                    form_factor.name IS NULL)
+                              """
             }
         }
         for crawl_name in self.crawls:
@@ -285,30 +320,110 @@ class Crawl(object):
         """Start a new crawl if necessary"""
         if self.status is None or 'crawl' not in self.status or self.status['crawl'] != self.current_crawl:
             try:
-                # Delete the old log
-                try:
-                    os.unlink('crawl.log')
-                except Exception:
-                    pass
                 self.crawled = {}
-                self.update_url_lists()
-                self.submit_initial_tests()
-                self.save_status()
+                if self.crux_updated():
+                    # Delete the old log
+                    try:
+                        os.unlink('crawl.log')
+                    except Exception:
+                        pass
+                    if (self.update_url_lists()):
+                        self.submit_initial_tests()
+                        self.save_status()
             except Exception:
                 logging.exception('Error starting new crawl')
         elif self.status is not None and not self.status.get('done'):
             self.load_crawled()
 
+    def crux_updated(self):
+        """Check to see if the CrUX dataset was updated this month"""
+        from google.cloud import bigquery
+        updated = False
+        try:
+            if self.bq_client is None:
+                self.bq_client = bigquery.Client()
+            query = """
+                    #standardSQL
+                    SELECT last_modified_time as ts, TIMESTAMP_MILLIS(last_modified_time) as last_modified
+                    FROM `chrome-ux-report.experimental`.__TABLES__ WHERE table_id = 'global'
+                    """
+            job_config = bigquery.job.QueryJobConfig(use_query_cache=False)
+            results = self.bq_client.query(query, job_config=job_config)
+            for row in results:
+                ts = row['ts']
+                modified = datetime.fromtimestamp(ts/1000.0, tz=timezone.utc)
+                if self.now.year == modified.year and self.now.month == modified.month:
+                    # Make sure it has been at least two hours
+                    if self.now.day > modified.day or self.now.hour > modified.hour + 2:
+                        updated = True
+                break
+        except Exception:
+            logging.exception('Error checking crux modified time')
+        return updated
+
+    def delete_url_lists(self):
+        """Delete any existing URL lists in cloud storage"""
+        try:
+            from google.cloud import storage
+            storage_client = storage.Client()
+            for crawl_name in self.crawls:
+                logging.info('Deleting %s url list...', crawl_name)
+                crawl = self.crawls[crawl_name]
+                with open(os.path.join(self.data_path, crawl_name + '.csv'), 'wt') as csv:
+                    blobs = storage_client.list_blobs(self.bucket, prefix=crawl['urls_file'])
+                    for blob in blobs:
+                        logging.info('Deleting %s ...', blob.name)
+                        blob.delete()
+        except Exception:
+            logging.exception('Error deleting url list')
+
+    def download_url_lists(self):
+        """Fetch the URL lists from cloud storage into a single csv"""
+        ok = False
+        try:
+            from google.cloud import storage
+            storage_client = storage.Client()
+            for crawl_name in self.crawls:
+                logging.info('Downloading %s url list...', crawl_name)
+                crawl = self.crawls[crawl_name]
+                with open(os.path.join(self.data_path, crawl_name + '.csv'), 'wt') as csv:
+                    csv.write('rank,url\n')
+                    blobs = storage_client.list_blobs(self.bucket, prefix=crawl['urls_file'])
+                    for blob in blobs:
+                        logging.info('Downloading %s ...', blob.name)
+                        csv.write(blob.download_as_text())
+                        ok = True
+        except Exception:
+            ok = False
+            logging.exception('Error downloading url list')
+        return ok
+
     def update_url_lists(self):
         """Download the lastes CrUX URL lists"""
-        from google.cloud import storage
-        storage_client = storage.Client()
-        bucket = storage_client.bucket(self.bucket)
-        for crawl_name in self.crawls:
-            logging.info('Downloading %s url list...', crawl_name)
-            crawl = self.crawls[crawl_name]
-            blob = bucket.blob(crawl['urls_file'])
-            blob.download_to_filename(os.path.join(self.data_path, crawl_name + '.csv'))
+        from google.cloud import bigquery
+        ok = False
+        # Delete any stale csv URL lists in cloud storage
+        self.delete_url_lists()
+
+        # Generate the new url list csv files in cloud storage
+        try:
+            if self.bq_client is None:
+                self.bq_client = bigquery.Client()
+            for crawl_name in self.crawls:
+                logging.info('Generating %s url list...', crawl_name)
+                crawl = self.crawls[crawl_name]
+                query = crawl['urls_query']
+                job_config = bigquery.job.QueryJobConfig(use_query_cache=False)
+                job = self.bq_client.query(query, job_config=job_config)
+                _ = job.result()
+                ok = True
+        except Exception:
+            logging.exception('Error generating url list')
+        
+        # Download the new csv url lists
+        if ok:
+            ok = self.download_url_lists()
+        return ok
 
     def submit_jobs(self):
         """Background thread that takes jobs from the job queue and submits them to the pubsub pending jobs list"""
