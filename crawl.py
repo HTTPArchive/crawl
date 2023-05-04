@@ -330,10 +330,14 @@ class Crawl(object):
                     if (self.update_url_lists()):
                         self.submit_initial_tests()
                         self.save_status()
+                else:
+                    logging.info('CrUX dataset not updated')
             except Exception:
                 logging.exception('Error starting new crawl')
         elif self.status is not None and not self.status.get('done'):
             self.load_crawled()
+        else:
+            logging.info('No new crawl pending.')
 
     def crux_updated(self):
         """Check to see if the CrUX dataset was updated this month"""
