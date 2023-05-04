@@ -360,6 +360,10 @@ class Crawl(object):
                     # Make sure it has been at least two hours
                     if self.now.day > modified.day or self.now.hour > modified.hour + 2:
                         updated = True
+                    else:
+                        logging.info('Crux URL list updated too recently - %d:%d on %d/%d/%d (m/d/y)', modified.hour, modified.minute, modified.month, modified.day, modified.year)
+                else:
+                    logging.info('CrUX URL list not updated this month - %d:%d on %d/%d/%d (m/d/y)', modified.hour, modified.minute, modified.month, modified.day, modified.year)
                 break
         except Exception:
             logging.exception('Error checking crux modified time')
