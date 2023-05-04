@@ -21,6 +21,7 @@ RETRY_COUNT = 2
 MAX_DEPTH = 1
 MAX_BREADTH = 1
 TESTING = False
+STATUS_DIRTY = False
 
 class Crawl(object):
     """Main agent workflow"""
@@ -119,6 +120,7 @@ class Crawl(object):
         self.job_thread.start()
         self.start_crawl()
         if not self.status['done']:
+            STATUS_DIRTY = True
             threads = []
             for _ in range(10):
                 thread = threading.Thread(target=self.retry_thread)
@@ -330,8 +332,6 @@ class Crawl(object):
                     if (self.update_url_lists()):
                         self.submit_initial_tests()
                         self.save_status()
-                else:
-                    logging.info('CrUX dataset not updated')
             except Exception:
                 logging.exception('Error starting new crawl')
         elif self.status is not None and not self.status.get('done'):
@@ -691,7 +691,8 @@ class Crawl(object):
                 json.dump(self.status, f, indent=4, sort_keys=True)
         except Exception:
             logging.exception('Error saving status')
-        logging.info("Status: %s", json.dumps(self.status, sort_keys=True))
+        if (STATUS_DIRTY):
+            logging.info("Status: %s", json.dumps(self.status, sort_keys=True))
 
     def num_to_str(self, num):
         """encode a number as an alphanum sequence"""
