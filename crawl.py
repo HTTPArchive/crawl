@@ -359,8 +359,8 @@ class Crawl(object):
                 if self.now.year == modified.year and self.now.month == modified.month:
                     # Make sure it has been at least two hours
                     delta = self.now - modified
-                    elapsed = delta.total_seconds()
-                    logging.info('Crux URL list updated too recently - %d seconds ago %d:%02d on %d/%d/%d (m/d/y)', elapsed, modified.hour, modified.minute, modified.month, modified.day, modified.year)
+                    hours = delta.total_seconds() / 3600.0
+                    logging.info('Crux URL list updated too recently - %0.1f hours ago %d:%02d on %d/%d/%d (m/d/y)', hours, modified.hour, modified.minute, modified.month, modified.day, modified.year)
                     #if self.now.day > modified.day or self.now.hour > modified.hour + 2:
                     #    updated = True
                     #else:
