@@ -358,12 +358,15 @@ class Crawl(object):
                 modified = datetime.fromtimestamp(ts/1000.0, tz=timezone.utc)
                 if self.now.year == modified.year and self.now.month == modified.month:
                     # Make sure it has been at least two hours
-                    if self.now.day > modified.day or self.now.hour > modified.hour + 2:
-                        updated = True
-                    else:
-                        logging.info('Crux URL list updated too recently - %d:%d on %d/%d/%d (m/d/y)', modified.hour, modified.minute, modified.month, modified.day, modified.year)
+                    delta = self.now - modified
+                    elapsed = delta.total_seconds()
+                    logging.info('Crux URL list updated too recently - %d seconds ago %d:%02d on %d/%d/%d (m/d/y)', elapsed, modified.hour, modified.minute, modified.month, modified.day, modified.year)
+                    #if self.now.day > modified.day or self.now.hour > modified.hour + 2:
+                    #    updated = True
+                    #else:
+                    #    logging.info('Crux URL list updated too recently - %d:%02d on %d/%d/%d (m/d/y)', modified.hour, modified.minute, modified.month, modified.day, modified.year)
                 else:
-                    logging.info('CrUX URL list not updated this month - %d:%d on %d/%d/%d (m/d/y)', modified.hour, modified.minute, modified.month, modified.day, modified.year)
+                    logging.info('CrUX URL list not updated this month - %d:%02d on %d/%d/%d (m/d/y)', modified.hour, modified.minute, modified.month, modified.day, modified.year)
                 break
         except Exception:
             logging.exception('Error checking crux modified time')
