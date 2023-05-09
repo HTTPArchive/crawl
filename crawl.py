@@ -357,14 +357,16 @@ class Crawl(object):
                 ts = row['ts']
                 modified = datetime.fromtimestamp(ts/1000.0, tz=timezone.utc)
                 if self.now.year == modified.year and self.now.month == modified.month:
-                    # Make sure it has been at least two hours
-                    delta = self.now - modified
-                    hours = delta.total_seconds() / 3600.0
-                    logging.info('Crux URL list updated too recently - %0.1f hours ago %d:%02d on %d/%d/%d (m/d/y)', hours, modified.hour, modified.minute, modified.month, modified.day, modified.year)
-                    #if self.now.day > modified.day or self.now.hour > modified.hour + 2:
-                    #    updated = True
-                    #else:
-                    #    logging.info('Crux URL list updated too recently - %d:%02d on %d/%d/%d (m/d/y)', modified.hour, modified.minute, modified.month, modified.day, modified.year)
+                    # Make sure it has been at least three hours
+                    if modified < self.now:
+                        delta = self.now - modified
+                        hours = delta.total_seconds() / 3600.0
+                        if hours > 3.0:
+                            updated = True
+                        else:
+                            logging.info('Crux URL list updated too recently - %0.1f hours ago at %d:%02d on %d/%d/%d (m/d/y)', hours, modified.hour, modified.minute, modified.month, modified.day, modified.year)
+                    else:
+                        logging.info('Crux URL list updated too recently - %d:%02d on %d/%d/%d (m/d/y)', modified.hour, modified.minute, modified.month, modified.day, modified.year)
                 else:
                     logging.info('CrUX URL list not updated this month - %d:%02d on %d/%d/%d (m/d/y)', modified.hour, modified.minute, modified.month, modified.day, modified.year)
                 break
@@ -397,13 +399,16 @@ class Crawl(object):
             for crawl_name in self.crawls:
                 logging.info('Downloading %s url list...', crawl_name)
                 crawl = self.crawls[crawl_name]
-                with open(os.path.join(self.data_path, crawl_name + '.csv'), 'wt') as csv:
+                csv_file = os.path.join(self.data_path, crawl_name + '.csv')
+                with open(csv_file, 'wt') as csv:
                     csv.write('rank,url\n')
                     blobs = storage_client.list_blobs(self.bucket, prefix=crawl['urls_file'])
                     for blob in blobs:
                         logging.info('Downloading %s ...', blob.name)
                         csv.write(blob.download_as_text())
                         ok = True
+                csv_size = float(os.path.getsize(csv_file)) / 1048576.0
+                logging.info('%s url list downloaded. %0.3f MB', crawl_name, csv_size)
         except Exception:
             ok = False
             logging.exception('Error downloading url list')
