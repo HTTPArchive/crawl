@@ -357,11 +357,11 @@ class Crawl(object):
                 ts = row['ts']
                 modified = datetime.fromtimestamp(ts/1000.0, tz=timezone.utc)
                 if self.now.year == modified.year and self.now.month == modified.month:
-                    # Make sure it has been at least three hours
+                    # Make sure it has been at least 24 hours
                     if modified < self.now:
                         delta = self.now - modified
                         hours = delta.total_seconds() / 3600.0
-                        if hours > 3.0:
+                        if hours > 24.0:
                             updated = True
                         else:
                             logging.info('Crux URL list updated too recently - %0.1f hours ago at %d:%02d on %d/%d/%d (m/d/y)', hours, modified.hour, modified.minute, modified.month, modified.day, modified.year)
