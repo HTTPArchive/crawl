@@ -134,3 +134,4 @@ data/
 crux_keys.json
 crawl.log
 crawl.py.lock
+*.py.lock
