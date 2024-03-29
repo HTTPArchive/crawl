@@ -62,7 +62,6 @@ class Monitor(object):
                     point = monitoring_v3.Point({"interval": interval, "value": {"double_value": counts[tube]}})
                     series.points = [point]
                     values.append(series)
-                logging.debug(json.dumps(values))
                 client.create_time_series(name=project_name, time_series=values)
             except Exception:
                 logging.exception("Error reporting metrics")
