@@ -59,7 +59,7 @@ class Monitor(object):
                     interval = monitoring_v3.TimeInterval(
                         {"end_time": {"seconds": seconds, "nanos": nanos}}
                     )
-                    point = monitoring_v3.Point({"interval": interval, "value": {"int64Value": str(counts[tube])}})
+                    point = monitoring_v3.Point({"interval": interval, "value": {"double_value": counts[tube]}})
                     series.points = [point]
                     values.append(series)
                 logging.debug(json.dumps(values))
