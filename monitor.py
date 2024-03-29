@@ -21,7 +21,7 @@ class Monitor(object):
         while True:
             counts = {}
             try:
-                beanstalk = greenstalk.Client('127.0.0.1', 11300)
+                beanstalk = greenstalk.Client(('127.0.0.1', 11300))
                 for tube in beanstalk.tubes():
                     try:
                         stats = beanstalk.stats_tube(tube)
