@@ -20,7 +20,10 @@ def main():
             beanstalk.delete(job)
         except Exception:
             pass
-        beanstalk.ignore(tube)
+        try:
+            beanstalk.ignore(tube)
+        except Exception:
+            pass
         logging.info('Drained {} jobs from {}', count, tube)
 
 if __name__ == '__main__':
