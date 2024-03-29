@@ -24,7 +24,7 @@ def main():
             beanstalk.ignore(tube)
         except Exception:
             pass
-        logging.info('Drained {} jobs from {}', count, tube)
+        logging.info('Drained %d jobs from %s', count, tube)
 
 if __name__ == '__main__':
     logging.basicConfig(
