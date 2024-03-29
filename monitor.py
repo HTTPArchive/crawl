@@ -23,7 +23,7 @@ class Monitor(object):
         metadata_flavor = {'Metadata-Flavor' : 'Google'}
         gce_id = requests.get(metadata_server + 'id', headers = metadata_flavor).text
         gce_zone = os.path.basename(requests.get(metadata_server + 'zone', headers = metadata_flavor).text)
-        logging.debug("GCE instance: %s, zone: %s", gce_id, gce_zone)
+        logging.info("GCE instance: %s, zone: %s", gce_id, gce_zone)
 
         while True:
             counts = {}
@@ -35,7 +35,7 @@ class Monitor(object):
                     try:
                         stats = beanstalk.stats_tube(tube)
                         count = stats['current-jobs-ready'] + stats['current-jobs-reserved']
-                        logging.debug('%s: %d', tube, count)
+                        logging.info('%s: %d', tube, count)
                         if tube in TUBES:
                             counts[tube] = count
                     except Exception:
@@ -81,7 +81,7 @@ def run_once():
 
 if __name__ == '__main__':
     logging.basicConfig(
-        level=logging.DEBUG,
+        level=logging.INFO,
         format="%(asctime)s.%(msecs)03d - %(message)s", datefmt="%H:%M:%S")
     run_once()
     monitor = Monitor()
