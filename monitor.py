@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+# Copyright 2024 Google Inc.
 import fcntl
 import greenstalk
 import json
