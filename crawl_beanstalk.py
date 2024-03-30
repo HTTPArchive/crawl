@@ -453,7 +453,7 @@ class Crawl(object):
                             beanstalk.put(job_compressed, ttr=3600)
                             pending_count += 1
                             total_count += 1
-                            if pending_count >= 1000:
+                            if pending_count >= 10000:
                                 logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
                                 pending_count = 0
                                 with self.status_mutex:
@@ -542,7 +542,7 @@ class Crawl(object):
                                 self.job_queue.put(job, block=True, timeout=600)
                                 test_count += 1
                                 if test_count % 10000 == 0:
-                                    logging.debug("Queued %d tests to be processed...", test_count)
+                                    logging.debug("Sent %d tests to be processed...", test_count)
                     except Exception:
                         logging.exception('Error processing URL')
                 except StopIteration:
