@@ -20,9 +20,12 @@ def main():
         previous = tube
         count = 0
         try:
-            job = beanstalk.reserve(10)
-            count += 1
-            beanstalk.delete(job)
+            while True:
+                job = beanstalk.reserve(5)
+                count += 1
+                if count % 10000 == 0:
+                    logging.info("Drained %d jobs from %s so far...", count, tube)
+                beanstalk.delete(job)
         except greenstalk.TimedOutError:
             pass
         except Exception:
