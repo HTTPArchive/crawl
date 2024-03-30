@@ -11,7 +11,7 @@ TUBES = {'crawl': 'Crawl tests work queue',
 
 def main():
     """ Drain all of the jobs from all of the queues """
-    beanstalk = greenstalk.Client(('127.0.0.1', 11300))
+    beanstalk = greenstalk.Client(('127.0.0.1', 11300), encoding=None)
     for tube in beanstalk.tubes():
         beanstalk.watch(tube)
         count = 0

@@ -438,32 +438,36 @@ class Crawl(object):
     def submit_jobs(self):
         """Background thread that takes jobs from the job queue and submits them to the beanstalk pending jobs list"""
         logging.debug('Submit thread started')
-        beanstalk = greenstalk.Client(('127.0.0.1', 11300), encoding=None, use='crawl')
-        pending_count = 0
-        total_count = 0
-        while not self.must_exit:
-            try:
-                while not self.must_exit:
-                    job = self.job_queue.get(block=True, timeout=5)
-                    if job is not None:
-                        job_str = json.dumps(job)
-                        job_compressed = zlib.compress(job_str, level=9)
-                        beanstalk.put(job_compressed, ttr=3600)
-                        pending_count += 1
-                        total_count += 1
-                        if pending_count >= 1000:
-                            logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
-                            pending_count = 0
-                            with self.status_mutex:
-                                self.status['last'] = time.time()
-                    self.job_queue.task_done()
-            except Exception:
-                pass
-            if pending_count:
-                logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
-                pending_count = 0
-                with self.status_mutex:
-                    self.status['last'] = time.time()
+        try:
+            beanstalk = greenstalk.Client(('127.0.0.1', 11300), encoding=None, use='crawl')
+            logging.debug('Submit thread connected to beanstalk')
+            pending_count = 0
+            total_count = 0
+            while not self.must_exit:
+                try:
+                    while not self.must_exit:
+                        job = self.job_queue.get(block=True, timeout=5)
+                        if job is not None:
+                            job_str = json.dumps(job)
+                            job_compressed = zlib.compress(job_str, level=9)
+                            beanstalk.put(job_compressed, ttr=3600)
+                            pending_count += 1
+                            total_count += 1
+                            if pending_count >= 1000:
+                                logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
+                                pending_count = 0
+                                with self.status_mutex:
+                                    self.status['last'] = time.time()
+                        self.job_queue.task_done()
+                except Exception:
+                    pass
+                if pending_count:
+                    logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
+                    pending_count = 0
+                    with self.status_mutex:
+                        self.status['last'] = time.time()
+        except Exception:
+            logging.exception('Error connecting to beanstalk in submit thread')
         logging.debug('Submit thread complete')
 
     def submit_initial_tests(self):
@@ -533,8 +537,8 @@ class Crawl(object):
                                     job.update(self.crawls[crawl_name]['job'])
                                 self.job_queue.put(job, block=True, timeout=600)
                                 test_count += 1
-                                if test_count % 1000 == 0:
-                                    logging.debug("Queued %d tests...", test_count)
+                                if test_count % 10000 == 0:
+                                    logging.debug("Queued %d tests to be processed...", test_count)
                     except Exception:
                         logging.exception('Error processing URL')
                 except StopIteration:
