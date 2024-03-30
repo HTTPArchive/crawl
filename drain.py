@@ -12,19 +12,21 @@ TUBES = {'crawl': 'Crawl tests work queue',
 def main():
     """ Drain all of the jobs from all of the queues """
     beanstalk = greenstalk.Client(('127.0.0.1', 11300), encoding=None)
+    previous = None
     for tube in beanstalk.tubes():
         beanstalk.watch(tube)
+        if previous is not None:
+            beanstalk.ignore(previous)
+        previous = tube
         count = 0
         try:
-            job = beanstalk.reserve(0)
+            job = beanstalk.reserve(10)
             count += 1
             beanstalk.delete(job)
-        except Exception:
+        except greenstalk.TimedOutError:
             pass
-        try:
-            beanstalk.ignore(tube)
         except Exception:
-            pass
+            logging.exception("Error draining tube %s", tube)
         logging.info('Drained %d jobs from %s', count, tube)
 
 if __name__ == '__main__':
