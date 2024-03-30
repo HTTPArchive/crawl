@@ -457,7 +457,8 @@ class Crawl(object):
                                 logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
                                 pending_count = 0
                                 with self.status_mutex:
-                                    self.status['last'] = time.time()
+                                    if self.status is not None:
+                                        self.status['last'] = time.time()
                         self.job_queue.task_done()
                 except queue.Empty:
                     pass
@@ -467,7 +468,8 @@ class Crawl(object):
                     logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
                     pending_count = 0
                     with self.status_mutex:
-                        self.status['last'] = time.time()
+                        if self.status is not None:
+                            self.status['last'] = time.time()
         except Exception:
             logging.exception('Error connecting to beanstalk in submit thread')
         logging.debug('Submit thread complete')
