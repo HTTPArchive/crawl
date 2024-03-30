@@ -449,7 +449,7 @@ class Crawl(object):
                         job = self.job_queue.get(block=True, timeout=5)
                         if job is not None:
                             job_str = json.dumps(job)
-                            job_compressed = zlib.compress(job_str, level=9)
+                            job_compressed = zlib.compress(job_str.encode(), level=9)
                             beanstalk.put(job_compressed, ttr=3600)
                             pending_count += 1
                             total_count += 1
@@ -459,6 +459,8 @@ class Crawl(object):
                                 with self.status_mutex:
                                     self.status['last'] = time.time()
                         self.job_queue.task_done()
+                except queue.Empty:
+                    pass
                 except Exception:
                     logging.exception('Job queue exception')
                 if pending_count:
