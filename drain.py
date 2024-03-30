@@ -17,6 +17,7 @@ def main():
         count = 0
         try:
             job = beanstalk.reserve(0)
+            count += 1
             beanstalk.delete(job)
         except Exception:
             pass
