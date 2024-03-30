@@ -460,7 +460,7 @@ class Crawl(object):
                                     self.status['last'] = time.time()
                         self.job_queue.task_done()
                 except Exception:
-                    pass
+                    logging.exception('Job queue exception')
                 if pending_count:
                     logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
                     pending_count = 0
