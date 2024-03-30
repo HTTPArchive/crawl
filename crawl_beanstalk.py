@@ -35,6 +35,8 @@ class Crawl(object):
         self.now = datetime.now(tz=timezone.utc)
         self.root_path = os.path.abspath(os.path.dirname(__file__))
         self.data_path = os.path.join(self.root_path, 'data')
+        if TESTING:
+            self.data_path = os.path.join(self.root_path, 'data-test')
         self.bq_client = None
         self.crawls = {
             'Desktop': {
@@ -95,16 +97,14 @@ class Crawl(object):
         self.done_queue = 'crawl-complete'
         self.test_archive = 'results'
         self.har_archive = 'crawls'
+        if TESTING:
+            self.har_archive += '-test'
         self.status = None
         self.previous_pending = None
         self.previous_count = None
         self.previous_time = None
         self.status_file = os.path.join(self.data_path, 'status.json')
         self.crawled_file = os.path.join(self.data_path, 'crawled.json')
-        if TESTING:
-            self.status_file = os.path.join(self.data_path, 'test-status.json')
-            self.crawled_file = os.path.join(self.data_path, 'test-crawled.json')
-            self.har_archive += '-test'
         self.status_mutex = threading.Lock()
         self.crawled = None
         self.load_status()
@@ -322,8 +322,7 @@ class Crawl(object):
                         os.unlink('crawl.log')
                     except Exception:
                         pass
-                    #if (self.update_url_lists()):
-                    if True: # pmeenan
+                    if (self.update_url_lists()):
                         self.submit_initial_tests()
                         self.save_status()
             except Exception:
@@ -533,6 +532,8 @@ class Crawl(object):
                                     job.update(self.crawls[crawl_name]['job'])
                                 self.job_queue.put(job, block=True, timeout=600)
                                 test_count += 1
+                                if test_count % 10000 == 0:
+                                    logging.debug("Queued %d tests...", test_count)
                     except Exception:
                         logging.exception('Error processing URL')
                 except StopIteration:
