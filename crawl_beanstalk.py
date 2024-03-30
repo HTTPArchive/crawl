@@ -322,7 +322,8 @@ class Crawl(object):
                         os.unlink('crawl.log')
                     except Exception:
                         pass
-                    if (self.update_url_lists()):
+                    #if (self.update_url_lists()):
+                    if True: # pmeenan
                         self.submit_initial_tests()
                         self.save_status()
             except Exception:
@@ -532,7 +533,7 @@ class Crawl(object):
                                     job.update(self.crawls[crawl_name]['job'])
                                 self.job_queue.put(job, block=True, timeout=600)
                                 test_count += 1
-                                if test_count % 10000 == 0:
+                                if test_count % 1000 == 0:
                                     logging.debug("Queued %d tests...", test_count)
                     except Exception:
                         logging.exception('Error processing URL')
