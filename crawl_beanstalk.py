@@ -534,7 +534,7 @@ class Crawl(object):
                                 }
                                 if MAX_DEPTH > 0:
                                     job['beanstalk_completed_queue'] = 'complete'
-                                    job['beanstalk_completed_metrics'] = ['crawl_links']
+                                    job['pubsub_completed_metrics'] = ['crawl_links']
                                 if self.crux_keys is not None and len(self.crux_keys):
                                     job['crux_api_key'] = random.choice(self.crux_keys)
                                 if 'job' in self.crawls[crawl_name]:
