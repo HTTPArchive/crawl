@@ -13,6 +13,14 @@ TUBES = {'crawl': 'Crawl tests work queue',
          'failed': 'Crawl tests failed queue',
          'complete': 'Crawl tests completed queue'}
 
+INSTANCE_GROUPS = ['agents-central1',
+                   'agents-east-1',
+                   'agents-east-4',
+                   'agents-west-1',
+                   'agents-west2',
+                   'agents-west3',
+                   'agents-west4']
+
 class Monitor(object):
     """Main agent workflow"""
     def __init__(self):
@@ -49,21 +57,24 @@ class Monitor(object):
                 project_name = "projects/httparchive"
                 values = []
                 for tube in TUBES:
-                    series = monitoring_v3.TimeSeries()
-                    series.metric.type = "custom.googleapis.com/crawl/queue/{}".format(tube)
-                    series.resource.type = "gce_instance"
-                    series.resource.labels["instance_id"] = gce_id
-                    series.resource.labels["zone"] = gce_zone
-                    series.metric.labels["Queue"] = tube
-                    now = time.time()
-                    seconds = int(now)
-                    nanos = int((now - seconds) * 10**9)
-                    interval = monitoring_v3.TimeInterval(
-                        {"end_time": {"seconds": seconds, "nanos": nanos}}
-                    )
-                    point = monitoring_v3.Point({"interval": interval, "value": {"double_value": counts[tube]}})
-                    series.points = [point]
-                    values.append(series)
+                    for group in INSTANCE_GROUPS:
+                        series = monitoring_v3.TimeSeries()
+                        series.metric.type = "custom.googleapis.com/crawl/queue/{}".format(tube)
+                        series.resource.type = "gce_instance"
+                        series.resource.labels["instance_id"] = gce_id
+                        series.resource.labels["zone"] = gce_zone
+                        series.metric.labels["Queue"] = tube
+                        series.metric.labels["project_id"] = 'httparchive'
+                        series.metric.labels["instance_group"] = group
+                        now = time.time()
+                        seconds = int(now)
+                        nanos = int((now - seconds) * 10**9)
+                        interval = monitoring_v3.TimeInterval(
+                            {"end_time": {"seconds": seconds, "nanos": nanos}}
+                        )
+                        point = monitoring_v3.Point({"interval": interval, "value": {"double_value": counts[tube]}})
+                        series.points = [point]
+                        values.append(series)
                 client.create_time_series(name=project_name, time_series=values)
             except Exception:
                 logging.exception("Error reporting metrics")
