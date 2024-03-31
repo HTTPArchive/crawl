@@ -1,9 +1,12 @@
+#!/usr/bin/env python3
+# Copyright 2024 Google Inc.
 """
 Main entry point for managing the monthly crawl
 """
 from datetime import datetime,timezone
 from urllib.parse import urlparse
 import fcntl
+import greenstalk
 import logging
 import queue
 import os
@@ -11,6 +14,7 @@ import random
 import string
 import threading
 import time
+import zlib
 try:
     import ujson as json
 except BaseException:
@@ -20,16 +24,19 @@ RUN_TIME = 3500
 RETRY_COUNT = 2
 MAX_DEPTH = 1
 MAX_BREADTH = 1
-TESTING = False
+TESTING = True
 STATUS_DIRTY = False
 
 class Crawl(object):
     """Main agent workflow"""
     def __init__(self):
         self.must_exit = False
+        self.exit_reader = False
         self.now = datetime.now(tz=timezone.utc)
         self.root_path = os.path.abspath(os.path.dirname(__file__))
         self.data_path = os.path.join(self.root_path, 'data')
+        if TESTING:
+            self.data_path = os.path.join(self.root_path, 'data-test')
         self.bq_client = None
         self.crawls = {
             'Desktop': {
@@ -84,7 +91,6 @@ class Crawl(object):
         self.id_characters = string.digits + string.ascii_uppercase
         self.project = 'httparchive'
         self.bucket = 'httparchive'
-        self.crawl_queue = 'crawl-queue'
         self.retry_queue = 'crawl-queue-retry'
         self.failed_queue = 'crawl-queue-failed'
         self.completed_queue = 'crawl-queue-completed'
@@ -92,12 +98,7 @@ class Crawl(object):
         self.test_archive = 'results'
         self.har_archive = 'crawls'
         if TESTING:
-            self.crawl_queue += '-test'
-            self.retry_queue += '-test'
-            self.failed_queue += '-test'
-            self.completed_queue += '-test'
             self.har_archive += '-test'
-            self.done_queue += '-test'
         self.status = None
         self.previous_pending = None
         self.previous_count = None
@@ -122,22 +123,21 @@ class Crawl(object):
         if not self.status['done']:
             STATUS_DIRTY = True
             threads = []
-            for _ in range(10):
-                thread = threading.Thread(target=self.retry_thread)
-                thread.start()
-                threads.append(thread)
+            thread = threading.Thread(target=self.retry_thread)
+            thread.start()
+            threads.append(thread)
             thread = threading.Thread(target=self.failed_thread)
             thread.start()
             threads.append(thread)
-            for _ in range(10):
-                thread = threading.Thread(target=self.completed_thread)
-                thread.start()
-                threads.append(thread)
+            thread = threading.Thread(target=self.completed_thread)
+            thread.start()
+            threads.append(thread)
 
             # Pump jobs until time is up
             time.sleep(RUN_TIME)
 
             # Wait for the subscriptions to exit
+            self.exit_reader = True
             for thread in threads:
                 try:
                     thread.join(timeout=60)
@@ -168,56 +168,56 @@ class Crawl(object):
 
     def retry_thread(self):
         """Thread for retry queue subscription"""
-        from google.cloud import pubsub_v1
-        subscriber = pubsub_v1.SubscriberClient()
-        subscription = subscriber.subscription_path(self.project, self.retry_queue)
-        flow_control = pubsub_v1.types.FlowControl(max_messages=15)
-        subscription_future = subscriber.subscribe(subscription, callback=self.retry_job, flow_control=flow_control, await_callbacks_on_shutdown=True)
-        with subscriber:
-            try:
-                subscription_future.result(timeout=RUN_TIME)
-            except TimeoutError:
-                subscription_future.cancel()
-                subscription_future.result(timeout=30)
-            except Exception:
-                logging.exception('Error waiting on subscription')
+        try:
+            beanstalk = greenstalk.Client(('127.0.0.1', 11300), encoding=None, watch='retry')
+            while not self.exit_reader:
+                try:
+                    job = beanstalk.reserve(10)
+                    if job is not None:
+                        task = zlib.decompress(job.body).decode()
+                        self.retry_job(task)
+                    beanstalk.delete(job)
+                except Exception:
+                    pass
+        except Exception:
+            logging.exception('Error checking for retry jobs')
 
     def failed_thread(self):
-        """Thread for falied queue subscription"""
-        from google.cloud import pubsub_v1
-        subscriber = pubsub_v1.SubscriberClient()
-        subscription = subscriber.subscription_path(self.project, self.failed_queue)
-        flow_control = pubsub_v1.types.FlowControl(max_messages=1)
-        subscription_future = subscriber.subscribe(subscription, callback=self.retry_job, flow_control=flow_control, await_callbacks_on_shutdown=True)
-        with subscriber:
-            try:
-                subscription_future.result(timeout=RUN_TIME)
-            except TimeoutError:
-                subscription_future.cancel()
-                subscription_future.result(timeout=30)
-            except Exception:
-                logging.exception('Error waiting on subscription')
+        """Thread for failed queue subscription"""
+        try:
+            beanstalk = greenstalk.Client(('127.0.0.1', 11300), encoding=None, watch='failed')
+            while not self.exit_reader:
+                try:
+                    job = beanstalk.reserve(10)
+                    if job is not None:
+                        task = zlib.decompress(job.body).decode()
+                        self.retry_job(task)
+                    beanstalk.delete(job)
+                except Exception:
+                    pass
+        except Exception:
+            logging.exception('Error checking for failed jobs')
 
     def completed_thread(self):
         """Thread for completed queue subscription"""
-        from google.cloud import pubsub_v1
-        subscriber = pubsub_v1.SubscriberClient()
-        subscription = subscriber.subscription_path(self.project, self.completed_queue)
-        flow_control = pubsub_v1.types.FlowControl(max_messages=15)
-        subscription_future = subscriber.subscribe(subscription, callback=self.crawl_job, flow_control=flow_control, await_callbacks_on_shutdown=True)
-        with subscriber:
-            try:
-                subscription_future.result(timeout=RUN_TIME)
-            except TimeoutError:
-                subscription_future.cancel()
-                subscription_future.result(timeout=30)
-            except Exception:
-                logging.exception('Error waiting on subscription')
-
-    def retry_job(self, message):
-        """Pubsub callback for jobs that may need to be retried"""
         try:
-            job = json.loads(message.data.decode('utf-8'))
+            beanstalk = greenstalk.Client(('127.0.0.1', 11300), encoding=None, watch='complete')
+            while not self.exit_reader:
+                try:
+                    job = beanstalk.reserve(10)
+                    if job is not None:
+                        task = zlib.decompress(job.body).decode()
+                        self.crawl_job(task)
+                    beanstalk.delete(job)
+                except Exception:
+                    pass
+        except Exception:
+            logging.exception('Error checking for failed jobs')
+
+    def retry_job(self, task):
+        """ retry and failed jobs that might need to be retried """
+        try:
+            job = json.loads(task)
             if job is not None and 'metadata' in job and 'layout' in job['metadata']:
                 crawl_name = job['metadata']['layout']
                 if 'retry_count' not in job['metadata']:
@@ -233,24 +233,20 @@ class Crawl(object):
                                 crawl['failed_count'] = 0
                             crawl['failed_count'] += 1
         except Exception:
-            logging.exception('Error processing pubsub job')
-        try:
-            message.ack()
-        except Exception:
-            pass
+            logging.exception('Error retrying job')
 
-    def crawl_job(self, message):
-        """Pubsub callback for jobs that completed (for crawling deeper into)"""
+    def crawl_job(self, task):
+        """ completed jobs (for crawling deeper into) """
         try:
             import copy
-            job = json.loads(message.data.decode('utf-8'))
+            job = json.loads(task)
             if job is not None and 'metadata' in job and 'layout' in job['metadata'] and \
                     'crawl_depth' in job['metadata'] and job['metadata']['crawl_depth'] < MAX_DEPTH and \
                     'results' in job:
                 crawl_name = job['metadata']['layout']
                 job['metadata']['crawl_depth'] += 1
-                if job['metadata']['crawl_depth'] == MAX_DEPTH and 'pubsub_completed_queue' in job:
-                    del job['pubsub_completed_queue']
+                if job['metadata']['crawl_depth'] == MAX_DEPTH and 'beanstalk_completed_queue' in job:
+                    del job['beanstalk_completed_queue']
                 job['metadata']['retry_count'] = 0
                 job['metadata']['parent_page_id'] = job['metadata']['page_id']
                 job['metadata']['parent_page_url'] = job['metadata']['tested_url']
@@ -312,24 +308,22 @@ class Crawl(object):
             else:
                 logging.debug('Invalid crawl job')
         except Exception:
-            logging.exception('Error processing pubsub job')
-        try:
-            message.ack()
-        except Exception:
-            pass
+            logging.exception('Error processing crawl job')
 
     def start_crawl(self):
         """Start a new crawl if necessary"""
         if self.status is None or 'crawl' not in self.status or self.status['crawl'] != self.current_crawl:
             try:
                 self.crawled = {}
-                if self.crux_updated():
+                #if self.crux_updated():
+                if True: # pmeenan
                     # Delete the old log
                     try:
                         os.unlink('crawl.log')
                     except Exception:
                         pass
-                    if (self.update_url_lists()):
+                    #if (self.update_url_lists()):
+                    if True: # pmeenan
                         self.submit_initial_tests()
                         self.save_status()
             except Exception:
@@ -442,51 +436,47 @@ class Crawl(object):
         return ok
 
     def submit_jobs(self):
-        """Background thread that takes jobs from the job queue and submits them to the pubsub pending jobs list"""
+        """Background thread that takes jobs from the job queue and submits them to the beanstalk pending jobs list"""
         logging.debug('Submit thread started')
-        from google.cloud import pubsub_v1
-        batch_settings = pubsub_v1.types.BatchSettings(
-            max_messages = 1000,                  # 1000 messages
-            max_bytes = 1 * 1000 * 1000 * 100,    # 100MB
-            max_latency = 1,                      # 1s
-        )
-        publisher = pubsub_v1.PublisherClient(batch_settings)
-        test_queue = publisher.topic_path(self.project, self.crawl_queue)
-        pending_count = 0
-        total_count = 0
-        while not self.must_exit:
-            try:
-                while not self.must_exit:
-                    job = self.job_queue.get(block=True, timeout=5)
-                    if job is not None:
-                        job_str = json.dumps(job)
-                        try:
-                            publisher.publish(test_queue, job_str.encode())
-                            logging.debug(job_str)
+        try:
+            beanstalk = greenstalk.Client(('127.0.0.1', 11300), encoding=None, use='crawl')
+            logging.debug('Submit thread connected to beanstalk')
+            pending_count = 0
+            total_count = 0
+            while not self.must_exit:
+                try:
+                    while not self.must_exit:
+                        job = self.job_queue.get(block=True, timeout=5)
+                        if job is not None:
+                            job_str = json.dumps(job)
+                            job_compressed = zlib.compress(job_str.encode(), level=9)
+                            beanstalk.put(job_compressed, ttr=3600)
                             pending_count += 1
                             total_count += 1
-                            if pending_count >= 1000:
+                            if pending_count >= 10000:
                                 logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
                                 pending_count = 0
                                 with self.status_mutex:
-                                    self.status['last'] = time.time()
-                        except Exception:
-                            logging.exception('Error publishing test to queue')
-                    self.job_queue.task_done()
-            except Exception:
-                pass
-            if pending_count:
-                logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
-                pending_count = 0
-                with self.status_mutex:
-                    self.status['last'] = time.time()
-        publisher.stop()
+                                    if self.status is not None:
+                                        self.status['last'] = time.time()
+                        self.job_queue.task_done()
+                except queue.Empty:
+                    pass
+                except Exception:
+                    logging.exception('Job queue exception')
+                if pending_count:
+                    logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
+                    pending_count = 0
+                    with self.status_mutex:
+                        if self.status is not None:
+                            self.status['last'] = time.time()
+        except Exception:
+            logging.exception('Error connecting to beanstalk in submit thread')
         logging.debug('Submit thread complete')
 
     def submit_initial_tests(self):
         """Interleave between the URL lists for the various crawls and post jobs to the submit thread"""
         import csv
-        from google.cloud import pubsub_v1
 
         logging.info('Submitting URLs for testing...')
         url_lists = {}
@@ -502,13 +492,10 @@ class Crawl(object):
         # Iterate over all of the crawls in parallel
         all_done = False
         index = 0
-        publisher = pubsub_v1.PublisherClient()
         test_count = 0
-        retry_queue = publisher.topic_path(self.project, self.retry_queue)
-        completed_queue = publisher.topic_path(self.project, self.completed_queue)
         while not all_done:
-            if TESTING and test_count > 10:
-                break
+            #if TESTING and test_count > 10:
+            #    break
             for crawl_name in url_lists:
                 crawl = url_lists[crawl_name]
                 try:
@@ -535,7 +522,7 @@ class Crawl(object):
                                         'root_page_url': url,
                                         'root_page_test_id': test_id
                                     },
-                                    'pubsub_retry_queue': retry_queue,
+                                    'beanstalk_retry_queue': 'retry',
                                     'gcs_test_archive': {
                                         'bucket': self.bucket,
                                         'path': self.test_archive
@@ -546,7 +533,7 @@ class Crawl(object):
                                     }
                                 }
                                 if MAX_DEPTH > 0:
-                                    job['pubsub_completed_queue'] = completed_queue
+                                    job['beanstalk_completed_queue'] = 'complete'
                                     job['pubsub_completed_metrics'] = ['crawl_links']
                                 if self.crux_keys is not None and len(self.crux_keys):
                                     job['crux_api_key'] = random.choice(self.crux_keys)
@@ -554,6 +541,8 @@ class Crawl(object):
                                     job.update(self.crawls[crawl_name]['job'])
                                 self.job_queue.put(job, block=True, timeout=600)
                                 test_count += 1
+                                if test_count % 10000 == 0:
+                                    logging.debug("Sent %d tests to be processed...", test_count)
                     except Exception:
                         logging.exception('Error processing URL')
                 except StopIteration:
@@ -583,36 +572,15 @@ class Crawl(object):
             crawl['fp'].close()
 
     def check_done(self):
-        """Check the pub/sub queue length to see the crawl progress"""
+        """Check the beanstalk queue lengths to see the crawl progress"""
         try:
-            from google.cloud import monitoring_v3
-
-            client = monitoring_v3.MetricServiceClient()
             now = time.time()
-            seconds = int(now)
-            nanos = int((now - seconds) * 10 ** 9)
-            interval = monitoring_v3.TimeInterval({
-                    "end_time": {"seconds": seconds, "nanos": nanos},
-                    "start_time": {"seconds": (seconds - 600), "nanos": nanos},
-                })
-
-            results = client.list_time_series(
-                request={
-                    "name": 'projects/{}'.format(self.project),
-                    "filter": 'metric.type = "pubsub.googleapis.com/subscription/num_undelivered_messages" AND resource.labels.subscription_id = "{}"'.format(self.crawl_queue),
-                    "interval": interval,
-                    "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
-                }
-            )
-
-            self.status['pending'] = -1
-            timestamp = None
-            for result in results:
-                for point in result.points:
-                    if timestamp is None or point.interval.end_time > timestamp:
-                        self.status['pending'] = point.value.int64_value
-                        timestamp = point.interval.end_time
-    
+            count = 0
+            beanstalk = greenstalk.Client(('127.0.0.1', 11300), encoding=None)
+            for tube in beanstalk.tubes():
+                stats = beanstalk.stats_tube(tube)
+                count += stats['current-jobs-ready'] + stats['current-jobs-reserved']
+            self.status['pending'] = count
             logging.info("%d tests pending", self.status['pending'])
 
             # Mark the crawl as done if we haven't moved or submitted tests
