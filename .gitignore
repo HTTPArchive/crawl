@@ -130,6 +130,7 @@ dmypy.json
 
 # Application-specific ignores
 data/
+data-test/
 .vscode/launch.json
 crux_keys.json
 crawl.log
