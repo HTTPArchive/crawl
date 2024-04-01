@@ -13,6 +13,8 @@ TUBES = {'crawl': 'Crawl tests work queue',
          'failed': 'Crawl tests failed queue',
          'complete': 'Crawl tests completed queue'}
 
+GROUPS = ['global', 'central-1', 'east-1', 'east-4', 'west-1', 'west-2', 'west-3', 'west-4']
+
 class Monitor(object):
     """Main agent workflow"""
     def __init__(self):
@@ -49,20 +51,21 @@ class Monitor(object):
                 project_name = "projects/httparchive"
                 values = []
                 for tube in TUBES:
-                    series = monitoring_v3.TimeSeries()
-                    series.metric.type = "custom.googleapis.com/crawl/queue/{}".format(tube)
-                    series.resource.type = "global"
-                    series.resource.labels["project_id"] = 'httparchive'
-                    series.metric.labels["queue"] = tube
-                    now = time.time()
-                    seconds = int(now)
-                    nanos = int((now - seconds) * 10**9)
-                    interval = monitoring_v3.TimeInterval(
-                        {"end_time": {"seconds": seconds, "nanos": nanos}}
-                    )
-                    point = monitoring_v3.Point({"interval": interval, "value": {"double_value": counts[tube]}})
-                    series.points = [point]
-                    values.append(series)
+                    for group in GROUPS:
+                        series = monitoring_v3.TimeSeries()
+                        series.metric.type = "custom.googleapis.com/crawl/{}/{}".format(group, tube)
+                        series.resource.type = "global"
+                        series.resource.labels["project_id"] = 'httparchive'
+                        series.metric.labels["queue"] = tube
+                        now = time.time()
+                        seconds = int(now)
+                        nanos = int((now - seconds) * 10**9)
+                        interval = monitoring_v3.TimeInterval(
+                            {"end_time": {"seconds": seconds, "nanos": nanos}}
+                        )
+                        point = monitoring_v3.Point({"interval": interval, "value": {"double_value": counts[tube]}})
+                        series.points = [point]
+                        values.append(series)
                 client.create_time_series(name=project_name, time_series=values)
             except Exception:
                 logging.exception("Error reporting metrics")
