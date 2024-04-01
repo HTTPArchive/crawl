@@ -22,13 +22,6 @@ class Monitor(object):
 
     def run(self):
         """ Update the metrics every 30 seconds """
-        import requests
-        metadata_server = "http://metadata/computeMetadata/v1/instance/"
-        metadata_flavor = {'Metadata-Flavor' : 'Google'}
-        gce_id = requests.get(metadata_server + 'id', headers = metadata_flavor).text
-        gce_zone = os.path.basename(requests.get(metadata_server + 'zone', headers = metadata_flavor).text)
-        logging.info("GCE instance: %s, zone: %s", gce_id, gce_zone)
-
         while True:
             counts = {}
             for tube in TUBES:
