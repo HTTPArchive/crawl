@@ -87,16 +87,11 @@ class Healthcheck(object):
                     self.terminate_instance(name)
 
     def run(self):
-        while True:
-            start = time.monotonic()
-            self.update_instances()
-            self.update_alive()
-            self.prune_instances()
-            with open(self.instances_file, 'wt', encoding='utf-8') as f:
-                json.dump(self.instances, f)
-            elapsed = time.monotonic() - start
-            if elapsed < 300:
-                time.sleep(300 - elapsed)
+        self.update_instances()
+        self.update_alive()
+        self.prune_instances()
+        with open(self.instances_file, 'wt', encoding='utf-8') as f:
+            json.dump(self.instances, f)
 
 # Make sure only one instance is running at a time
 lock_handle = None
