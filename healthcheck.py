@@ -34,11 +34,15 @@ class Healthcheck(object):
                 for instance in response.instances:
                     name = instance.name
                     if name.startswith('agents-'):
-                        started = datetime.datetime.fromisoformat(instance.last_start_timestamp).timestamp()
-                        instances[name] = {'ip': instance.network_interfaces[0].network_i_p,
-                                            'zone': zone,
-                                            'started': started}
-                        logging.info('%s - %s (uptime: %d)', instance.name, instance.network_interfaces[0].network_i_p, int(time.time() - started))
+                        try:
+                            timestamp = instance.last_start_timestamp if instance.last_start_timestamp else instance.creation_timestamp
+                            started = datetime.datetime.fromisoformat(timestamp).timestamp()
+                            instances[name] = {'ip': instance.network_interfaces[0].network_i_p,
+                                                'zone': zone,
+                                                'started': started}
+                            logging.info('%s - %s (uptime: %d)', instance.name, instance.network_interfaces[0].network_i_p, int(time.time() - started))
+                        except Exception:
+                            pass
         # Reconcile the list of instances
         for name in self.instances:
             if name not in instances:
