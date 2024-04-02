@@ -125,6 +125,7 @@ def run_once():
 if __name__ == '__main__':
     logging.basicConfig(
         level=logging.INFO,
+        filename='healthcheck.log',
         format="%(asctime)s.%(msecs)03d - %(message)s", datefmt="%H:%M:%S")
     run_once()
     healthcheck = Healthcheck()
