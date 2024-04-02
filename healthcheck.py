@@ -17,17 +17,17 @@ class Healthcheck(object):
         self.last_update = None
         self.root_path = os.path.abspath(os.path.dirname(__file__))
         self.instances_file = os.path.join(self.root_path, 'data', 'instances.json')
+        self.instance_client = compute_v1.InstancesClient()
         if os.path.exists(self.instances_file):
             with open(self.instances_file, 'rt', encoding='utf-8') as f:
                 self.instances = json.load(f)
 
     def update_instances(self):
         """ Update the authoritative list of running instances """
-        instance_client = compute_v1.InstancesClient()
         request = compute_v1.AggregatedListInstancesRequest()
         request.project = PROJECT
         request.max_results = 500
-        agg_list = instance_client.aggregated_list(request=request)
+        agg_list = self.instance_client.aggregated_list(request=request)
         instances = {}
         for zone, response in agg_list:
             if response.instances:
@@ -79,7 +79,12 @@ class Healthcheck(object):
             logging.exception("Error checking alive tube")
 
     def terminate_instance(self, name):
-        logging.debug('Terminating %s...', name)
+        try:
+            instance = self.instances[name]
+            logging.debug('Terminating %s in zone %s ...', name, instance['zone'])
+            self.instance_client.delete(project=PROJECT, zone=instance['zone'], instance=name)
+        except Exception:
+            logging.exception('Error deleting instance')
 
     def prune_instances(self):
         """ Delete any instances that have been running for more than an hour with a last-alive > 30 minutes ago """
