@@ -51,6 +51,7 @@ class Healthcheck(object):
             self.instances[name]['started'] = instances[name]['started']
 
     def update_alive(self):
+        logging.info("Updating the last-alive times...")
         beanstalk = greenstalk.Client(('127.0.0.1', 11300), encoding=None, watch='alive')
         # update the last-alive time for all of the instances
         now = time.time()
@@ -64,6 +65,8 @@ class Healthcheck(object):
                     if name in self.instances:
                         self.instances[name]['alive'] = last_alive
                         logging.debug("%s - last alive %d seconds ago", name, now - last_alive)
+                    else:
+                        logging.debug("%s - Instance not found", name)
                 beanstalk.delete(job)
         except greenstalk.TimedOutError:
             pass
@@ -107,7 +110,7 @@ def run_once():
 
 if __name__ == '__main__':
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,
         format="%(asctime)s.%(msecs)03d - %(message)s", datefmt="%H:%M:%S")
     run_once()
     healthcheck = Healthcheck()
