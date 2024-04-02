@@ -2,6 +2,7 @@
 # Copyright 2024 Google Inc.
 import greenstalk
 import logging
+import zlib
 
 def main():
     """ Get the stats for the first job in the queue """
@@ -10,6 +11,8 @@ def main():
         job = beanstalk.reserve(1)
         stats = beanstalk.stats_job(job)
         logging.info(stats)
+        if stats and 'timeouts' in stats and stats['timeouts'] >= 2:
+            logging.info(zlib.decompress(job.body).decode())
         beanstalk.release(job)
     except greenstalk.TimedOutError:
         pass
