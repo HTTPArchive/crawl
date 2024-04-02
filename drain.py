@@ -7,7 +7,8 @@ import zlib
 TUBES = {'crawl': 'Crawl tests work queue',
          'retry': 'Crawl tests retry queue',
          'failed': 'Crawl tests failed queue',
-         'complete': 'Crawl tests completed queue'}
+         'complete': 'Crawl tests completed queue',
+         'alive': 'Health checks'}
 
 def main():
     """ Drain all of the jobs from all of the queues """

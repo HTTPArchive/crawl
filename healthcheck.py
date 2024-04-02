@@ -1,78 +1,99 @@
 #!/usr/bin/env python3
 # Copyright 2024 Google Inc.
+import datetime
 import fcntl
+import greenstalk
 import json
 import logging
 import os
-import requests
 import time
 from google.cloud import compute_v1
 
 PROJECT = 'httparchive'
-UPDATE_INTERVAL = 1800  # update the list of instances every 30 minutes
 
 class Healthcheck(object):
     def __init__(self):
         self.instances = {}
         self.last_update = None
+        self.root_path = os.path.abspath(os.path.dirname(__file__))
+        self.instances_file = os.path.join(self.root_path, 'data', 'instances.json')
+        if os.path.exists(self.instances_file):
+            with open(self.instances_file, 'rt', encoding='utf-8') as f:
+                self.instances = json.load(f)
 
     def update_instances(self):
         """ Update the authoritative list of running instances """
-        now = time.monotonic()
-        if self.last_update is None or now - self.last_update > UPDATE_INTERVAL:
-            instance_client = compute_v1.InstancesClient()
-            request = compute_v1.AggregatedListInstancesRequest()
-            request.project = PROJECT
-            request.max_results = 500
-            agg_list = instance_client.aggregated_list(request=request)
-            instances = {}
-            for zone, response in agg_list:
-                if response.instances:
-                    for instance in response.instances:
-                        name = instance.name
-                        if name.startswith('agents-'):
-                            instances[name] = {'ip': instance.network_interfaces[0].network_i_p, 'zone': zone}
-                            logging.info('%s - %s', instance.name, instance.network_interfaces[0].network_i_p)
-            # Reconcile the list of instances
-            for name in self.instances:
-                if name not in instances:
-                    del self.instances[name]
-            for name in instances:
-                if name not in self.instances:
-                    self.instances[name] = {}
-                self.instances[name]['ip'] = instances[name]['ip']
-                self.instances[name]['zone'] = instances[name]['zone']
-            self.last_update = now
-
-    def check_instance(self, name):
-        instance = self.instances[name]
-        ip = instance['ip']
-        ok = False
-        try:
-            request = requests.get("http://{}:8889/".format(ip), timeout=60)
-            if request.status_code == 200:
-                ok = True
-        except:
-            pass
-        if ok:
-            logging.info("%s - OK", name)
-            instance['c'] = 0
-        else:
-            if 'c' not in instance:
-                instance['c'] = 0
-            instance['c'] += 1
-            logging.info("%s - FAILED %d times", name, instance['c'])
-
-    def check_instances(self):
+        instance_client = compute_v1.InstancesClient()
+        request = compute_v1.AggregatedListInstancesRequest()
+        request.project = PROJECT
+        request.max_results = 500
+        agg_list = instance_client.aggregated_list(request=request)
+        instances = {}
+        for zone, response in agg_list:
+            if response.instances:
+                for instance in response.instances:
+                    name = instance.name
+                    if name.startswith('agents-'):
+                        started = datetime.datetime.fromisoformat(instance.last_start_timestamp).timestamp()
+                        instances[name] = {'ip': instance.network_interfaces[0].network_i_p,
+                                            'zone': zone,
+                                            'started': started}
+                        logging.info('%s - %s (uptime: %d)', instance.name, instance.network_interfaces[0].network_i_p, int(time.time() - started))
+        # Reconcile the list of instances
         for name in self.instances:
-            self.check_instance(name)
+            if name not in instances:
+                del self.instances[name]
+        for name in instances:
+            if name not in self.instances:
+                self.instances[name] = {}
+            self.instances[name]['ip'] = instances[name]['ip']
+            self.instances[name]['zone'] = instances[name]['zone']
+            self.instances[name]['started'] = instances[name]['started']
 
+    def update_alive(self):
+        beanstalk = greenstalk.Client(('127.0.0.1', 11300), encoding=None, watch='alive')
+        # update the last-alive time for all of the instances
+        now = time.time()
+        try:
+            while True:
+                job = beanstalk.reserve(1)
+                message = json.loads(job.body.decode())
+                if 'n' in message and 't' in message:
+                    name = message['n']
+                    last_alive = message['t']
+                    if name in self.instances:
+                        self.instances[name]['alive'] = last_alive
+                        logging.debug("%s - last alive %d seconds ago", name, now - last_alive)
+                beanstalk.delete(job)
+        except greenstalk.TimedOutError:
+            pass
+        except Exception:
+            logging.exception("Error checking alive tube")
+
+    def terminate_instance(self, name):
+        logging.debug('Terminating %s...', name)
+
+    def prune_instances(self):
+        """ Delete any instances that have been running for more than an hour with a last-alive > 30 minutes ago """
+        now = time.time()
+        for name in self.instances:
+            instance = self.instances[name]
+            uptime = now - instance['started']
+            if uptime > 3600:
+                elapsed = None
+                if 'alive' in instance:
+                    elapsed = now - instance['alive']
+                if elapsed is None or elapsed > 1800:
+                    self.terminate_instance(name)
 
     def run(self):
         while True:
             start = time.monotonic()
             self.update_instances()
-            self.check_instances()
+            self.update_alive()
+            self.prune_instances()
+            with open(self.instances_file, 'wt', encoding='utf-8') as f:
+                json.dump(self.instances, f)
             elapsed = time.monotonic() - start
             if elapsed < 300:
                 time.sleep(300 - elapsed)
