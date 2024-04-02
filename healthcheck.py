@@ -92,9 +92,9 @@ class Healthcheck(object):
     def run(self):
         self.update_instances()
         self.update_alive()
-        self.prune_instances()
         with open(self.instances_file, 'wt', encoding='utf-8') as f:
             json.dump(self.instances, f)
+        self.prune_instances()
 
 # Make sure only one instance is running at a time
 lock_handle = None
