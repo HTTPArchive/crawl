@@ -84,6 +84,7 @@ class Healthcheck(object):
     def prune_instances(self):
         """ Delete any instances that have been running for more than an hour with a last-alive > 30 minutes ago """
         now = time.time()
+        count = 0
         for name in self.instances:
             instance = self.instances[name]
             uptime = now - instance['started']
@@ -92,7 +93,9 @@ class Healthcheck(object):
                 if 'alive' in instance:
                     elapsed = now - instance['alive']
                 if elapsed is None or elapsed > 1800:
+                    count += 1
                     self.terminate_instance(name)
+        logging.info('Terminated %d instances', count)
 
     def run(self):
         self.update_instances()
