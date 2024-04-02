@@ -71,7 +71,7 @@ class Healthcheck(object):
                     if name in self.instances:
                         self.instances[name]['alive'] = last_alive
                     if count % 10000 == 0:
-                        logging.debug('Processed %d alive updates...', count)
+                        logging.info('Processed %d alive updates...', count)
                 beanstalk.delete(job)
         except greenstalk.TimedOutError:
             pass
@@ -82,7 +82,7 @@ class Healthcheck(object):
         try:
             instance = self.instances[name]
             zone = os.path.basename(instance['zone'])
-            logging.debug('Terminating %s in zone %s ...', name, zone)
+            logging.info('Terminating %s in zone %s ...', name, zone)
             self.instance_client.delete(project=PROJECT, zone=zone, instance=name)
         except Exception:
             logging.exception('Error deleting instance')
@@ -124,7 +124,7 @@ def run_once():
 
 if __name__ == '__main__':
     logging.basicConfig(
-        level=logging.DEBUG,
+        level=logging.INFO,
         format="%(asctime)s.%(msecs)03d - %(message)s", datefmt="%H:%M:%S")
     run_once()
     healthcheck = Healthcheck()
