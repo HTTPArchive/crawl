@@ -55,18 +55,19 @@ class Healthcheck(object):
         beanstalk = greenstalk.Client(('127.0.0.1', 11300), encoding=None, watch='alive')
         # update the last-alive time for all of the instances
         try:
+            count = 0
             while True:
-                job = beanstalk.reserve(1)
+                job = beanstalk.reserve(0)
                 message = json.loads(job.body.decode())
                 if 'n' in message and 't' in message:
                     now = time.time()
                     name = message['n']
                     last_alive = min(message['t'], now)
+                    count += 1
                     if name in self.instances:
                         self.instances[name]['alive'] = last_alive
-                        logging.debug("%s - last alive %d seconds ago", name, now - last_alive)
-                    else:
-                        logging.debug("%s - Instance not found", name)
+                    if count % 10000 == 0:
+                        logging.debug('Processed %d alive updates...', count)
                 beanstalk.delete(job)
         except greenstalk.TimedOutError:
             pass
