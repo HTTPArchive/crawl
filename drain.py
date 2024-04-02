@@ -2,6 +2,7 @@
 # Copyright 2024 Google Inc.
 import greenstalk
 import logging
+import zlib
 
 TUBES = {'crawl': 'Crawl tests work queue',
          'retry': 'Crawl tests retry queue',
@@ -22,6 +23,8 @@ def main():
             try:
                 while True:
                     job = beanstalk.reserve(1)
+                    if tube == 'failed':
+                        logging.info("Failed job: %s", zlib.decompress(job.body).decode())
                     count += 1
                     if count % 10000 == 0:
                         logging.info("Drained %d jobs from %s so far...", count, tube)
