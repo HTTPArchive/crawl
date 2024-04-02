@@ -38,7 +38,7 @@ class Healthcheck(object):
                             timestamp = instance.last_start_timestamp if instance.last_start_timestamp else instance.creation_timestamp
                             started = datetime.datetime.fromisoformat(timestamp).timestamp()
                             instances[name] = {'ip': instance.network_interfaces[0].network_i_p,
-                                                'zone': zone,
+                                                'zone': os.path.basename(zone),
                                                 'started': started}
                             logging.info('%s - %s (uptime: %d)', instance.name, instance.network_interfaces[0].network_i_p, int(time.time() - started))
                         except Exception:
@@ -81,8 +81,9 @@ class Healthcheck(object):
     def terminate_instance(self, name):
         try:
             instance = self.instances[name]
-            logging.debug('Terminating %s in zone %s ...', name, instance['zone'])
-            self.instance_client.delete(project=PROJECT, zone=instance['zone'], instance=name)
+            zone = os.path.basename(instance['zone'])
+            logging.debug('Terminating %s in zone %s ...', name, zone)
+            self.instance_client.delete(project=PROJECT, zone=zone, instance=name)
         except Exception:
             logging.exception('Error deleting instance')
 
