@@ -24,7 +24,7 @@ RUN_TIME = 3500
 RETRY_COUNT = 2
 MAX_DEPTH = 1
 MAX_BREADTH = 1
-TESTING = True
+TESTING = False
 STATUS_DIRTY = False
 
 class Crawl(object):
@@ -315,15 +315,13 @@ class Crawl(object):
         if self.status is None or 'crawl' not in self.status or self.status['crawl'] != self.current_crawl:
             try:
                 self.crawled = {}
-                #if self.crux_updated():
-                if True: # pmeenan
+                if self.crux_updated():
                     # Delete the old log
                     try:
                         os.unlink('crawl.log')
                     except Exception:
                         pass
-                    #if (self.update_url_lists()):
-                    if True: # pmeenan
+                    if (self.update_url_lists()):
                         self.submit_initial_tests()
                         self.save_status()
             except Exception:
@@ -494,8 +492,8 @@ class Crawl(object):
         index = 0
         test_count = 0
         while not all_done:
-            #if TESTING and test_count > 10:
-            #    break
+            if TESTING and test_count > 10:
+                break
             for crawl_name in url_lists:
                 crawl = url_lists[crawl_name]
                 try:
