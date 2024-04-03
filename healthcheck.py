@@ -126,6 +126,8 @@ class Healthcheck(object):
             with open(self.instances_file, 'wt', encoding='utf-8') as f:
                 json.dump(self.instances, f)
             self.prune_instances()
+        else:
+            logging.info('No tests pending, skipping health check')
 
 # Make sure only one instance is running at a time
 lock_handle = None
