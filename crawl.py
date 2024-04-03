@@ -445,7 +445,7 @@ class Crawl(object):
                         if job is not None:
                             job_str = json.dumps(job)
                             job_compressed = zlib.compress(job_str.encode(), level=9)
-                            beanstalk.put(job_compressed, ttr=3600)
+                            beanstalk.put(job_compressed, ttr=1800)
                             pending_count += 1
                             total_count += 1
                             if pending_count >= 10000:
