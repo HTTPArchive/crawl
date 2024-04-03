@@ -44,9 +44,12 @@ class Healthcheck(object):
                         except Exception:
                             pass
         # Reconcile the list of instances
+        delete_names = []
         for name in self.instances:
             if name not in instances:
-                del self.instances[name]
+                delete_names.append(name)
+        for name in delete_names:
+            del self.instances[name]
         for name in instances:
             if name not in self.instances:
                 self.instances[name] = {}
