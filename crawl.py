@@ -91,9 +91,6 @@ class Crawl(object):
         self.id_characters = string.digits + string.ascii_uppercase
         self.project = 'httparchive'
         self.bucket = 'httparchive'
-        self.retry_queue = 'crawl-queue-retry'
-        self.failed_queue = 'crawl-queue-failed'
-        self.completed_queue = 'crawl-queue-completed'
         self.done_queue = 'crawl-complete'
         self.test_archive = 'results'
         self.har_archive = 'crawls'
