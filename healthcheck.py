@@ -106,12 +106,26 @@ class Healthcheck(object):
                     self.terminate_instance(name)
         logging.info('Terminated %d instances', count)
 
+    def tests_pending(self):
+        """ See if there are any tests in the crawl queue before checking VMs """
+        pending = False
+        try:
+            beanstalk = greenstalk.Client(('127.0.0.1', 11300))
+            stats = beanstalk.stats_tube('crawl')
+            count = stats['current-jobs-ready'] + stats['current-jobs-reserved']
+            if count > 0:
+                pending = True
+        except Exception:
+            logging.exception("Error checking queue")
+        return pending
+
     def run(self):
-        self.update_instances()
-        self.update_alive()
-        with open(self.instances_file, 'wt', encoding='utf-8') as f:
-            json.dump(self.instances, f)
-        self.prune_instances()
+        if self.tests_pending():
+            self.update_instances()
+            self.update_alive()
+            with open(self.instances_file, 'wt', encoding='utf-8') as f:
+                json.dump(self.instances, f)
+            self.prune_instances()
 
 # Make sure only one instance is running at a time
 lock_handle = None
