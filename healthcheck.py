@@ -58,15 +58,15 @@ class Healthcheck(object):
         logging.info("Updating the last-alive times...")
         beanstalk = greenstalk.Client(('127.0.0.1', 11300), encoding=None, watch='alive')
         # update the last-alive time for all of the instances
+        now = time.time()
         try:
             count = 0
             while True:
                 job = beanstalk.reserve(0)
                 message = json.loads(job.body.decode())
                 if 'n' in message and 't' in message:
-                    now = time.time()
                     name = message['n']
-                    last_alive = min(message['t'], now)
+                    last_alive = now
                     count += 1
                     if name in self.instances:
                         self.instances[name]['alive'] = last_alive
