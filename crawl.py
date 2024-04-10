@@ -185,13 +185,22 @@ class Crawl(object):
             beanstalk = greenstalk.Client(('127.0.0.1', 11300), encoding=None, watch='failed')
             while not self.exit_reader:
                 try:
-                    job = beanstalk.reserve(10)
-                    if job is not None:
-                        task = zlib.decompress(job.body).decode()
-                        self.retry_job(task)
-                    beanstalk.delete(job)
-                except Exception:
+                    job_beanstalk = beanstalk.reserve(10)
+                    if job_beanstalk is not None:
+                        task = zlib.decompress(job_beanstalk.body).decode()
+                        job = json.loads(task)
+                        crawl_name = job['metadata']['layout']
+                        with self.status_mutex:
+                            if self.status is not None and 'crawls' in self.status and crawl_name in self.status['crawls']:
+                                crawl = self.status['crawls'][crawl_name]
+                                if 'failed_count' not in crawl:
+                                    crawl['failed_count'] = 0
+                                crawl['failed_count'] += 1
+                    beanstalk.delete(job_beanstalk)
+                except greenstalk.TimedOutError:
                     pass
+                except Exception:
+                    logging.exception('Error processing failed job')
         except Exception:
             logging.exception('Error checking for failed jobs')
 
