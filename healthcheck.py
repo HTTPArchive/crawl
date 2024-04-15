@@ -119,6 +119,18 @@ class Healthcheck(object):
             logging.exception("Error checking queue")
         return pending
 
+    def drain():
+        logging.info("Draining the last-alive message stragglers...")
+        beanstalk = greenstalk.Client(('127.0.0.1', 11300), encoding=None, watch='alive')
+        try:
+            while True:
+                job = beanstalk.reserve(0)
+                beanstalk.delete(job)
+        except greenstalk.TimedOutError:
+            pass
+        except Exception:
+            logging.exception("Error draining the alive tube")
+
     def run(self):
         if self.tests_pending():
             self.update_instances()
@@ -128,6 +140,7 @@ class Healthcheck(object):
             self.prune_instances()
         else:
             logging.info('No tests pending, skipping health check')
+            self.drain()
 
 # Make sure only one instance is running at a time
 lock_handle = None
