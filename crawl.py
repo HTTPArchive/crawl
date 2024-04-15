@@ -581,9 +581,11 @@ class Crawl(object):
             now = time.time()
             count = 0
             beanstalk = greenstalk.Client(('127.0.0.1', 11300), encoding=None)
+            tubes = ['crawl', 'retry']
             for tube in beanstalk.tubes():
-                stats = beanstalk.stats_tube(tube)
-                count += stats['current-jobs-ready'] + stats['current-jobs-reserved']
+                if tube in tubes:
+                    stats = beanstalk.stats_tube(tube)
+                    count += stats['current-jobs-ready'] + stats['current-jobs-reserved']
             self.status['pending'] = count
             logging.info("%d tests pending", self.status['pending'])
 
