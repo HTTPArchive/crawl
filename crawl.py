@@ -190,6 +190,12 @@ class Crawl(object):
                         task = zlib.decompress(job_beanstalk.body).decode()
                         job = json.loads(task)
                         crawl_name = job['metadata']['layout']
+                        try:
+                            log_file = os.path.join(self.root_path, crawl_name + '_failed.log')
+                            with open(log_file, 'wt', encoding='utf-8') as f:
+                                f.write(job['url'] + "\n")
+                        except Exception:
+                            logging.exception('Error logging failed test')
                         with self.status_mutex:
                             if self.status is not None and 'crawls' in self.status and crawl_name in self.status['crawls']:
                                 crawl = self.status['crawls'][crawl_name]
@@ -322,11 +328,16 @@ class Crawl(object):
             try:
                 self.crawled = {}
                 if self.crux_updated():
-                    # Delete the old log
+                    # Delete the old logs
                     try:
                         os.unlink('crawl.log')
                     except Exception:
                         pass
+                    for crawl_name in self.crawls:
+                        try:
+                            os.unlink(os.path.join(self.root_path, crawl_name + '_failed.log'))
+                        except Exception:
+                            pass
                     if (self.update_url_lists()):
                         self.submit_initial_tests()
                         self.save_status()
