@@ -24,7 +24,7 @@ RUN_TIME = 3500
 RETRY_COUNT = 2
 MAX_DEPTH = 1
 MAX_BREADTH = 1
-TESTING = False
+TESTING = True
 STATUS_DIRTY = False
 
 class Crawl(object):
@@ -35,8 +35,11 @@ class Crawl(object):
         self.now = datetime.now(tz=timezone.utc)
         self.root_path = os.path.abspath(os.path.dirname(__file__))
         self.data_path = os.path.join(self.root_path, 'data')
+        #self.bq_datastore = 'httparchive.all'
+        self.bq_datastore = 'httparchive.z_test_all'
         if TESTING:
             self.data_path = os.path.join(self.root_path, 'data-test')
+            self.bq_datastore = 'httparchive.z_test_all'
         self.bq_client = None
         self.crawls = {
             'Desktop': {
@@ -327,7 +330,7 @@ class Crawl(object):
         if self.status is None or 'crawl' not in self.status or self.status['crawl'] != self.current_crawl:
             try:
                 self.crawled = {}
-                if self.crux_updated():
+                if TESTING or self.crux_updated():
                     # Delete the old logs
                     try:
                         os.unlink('crawl.log')
@@ -338,7 +341,7 @@ class Crawl(object):
                             os.unlink(os.path.join(self.root_path, crawl_name + '_failed.log'))
                         except Exception:
                             pass
-                    if (self.update_url_lists()):
+                    if self.update_url_lists():
                         self.submit_initial_tests()
                         self.save_status()
             except Exception:
@@ -406,18 +409,21 @@ class Crawl(object):
             from google.cloud import storage
             storage_client = storage.Client()
             for crawl_name in self.crawls:
-                logging.info('Downloading %s url list...', crawl_name)
-                crawl = self.crawls[crawl_name]
                 csv_file = os.path.join(self.data_path, crawl_name + '.csv')
-                with open(csv_file, 'wt') as csv:
-                    csv.write('rank,url\n')
-                    blobs = storage_client.list_blobs(self.bucket, prefix=crawl['urls_file'])
-                    for blob in blobs:
-                        logging.info('Downloading %s ...', blob.name)
-                        csv.write(blob.download_as_text())
-                        ok = True
-                csv_size = float(os.path.getsize(csv_file)) / 1048576.0
-                logging.info('%s url list downloaded. %0.3f MB', crawl_name, csv_size)
+                if not TESTING or not os.path.exists(csv_file):
+                    logging.info('Downloading %s url list...', crawl_name)
+                    crawl = self.crawls[crawl_name]
+                    with open(csv_file, 'wt') as csv:
+                        csv.write('rank,url\n')
+                        blobs = storage_client.list_blobs(self.bucket, prefix=crawl['urls_file'])
+                        for blob in blobs:
+                            logging.info('Downloading %s ...', blob.name)
+                            csv.write(blob.download_as_text())
+                            ok = True
+                    csv_size = float(os.path.getsize(csv_file)) / 1048576.0
+                    logging.info('%s url list downloaded. %0.3f MB', crawl_name, csv_size)
+                else:
+                    ok = True
         except Exception:
             ok = False
             logging.exception('Error downloading url list')
@@ -427,23 +433,27 @@ class Crawl(object):
         """Download the lastes CrUX URL lists"""
         from google.cloud import bigquery
         ok = False
-        # Delete any stale csv URL lists in cloud storage
-        self.delete_url_lists()
 
-        # Generate the new url list csv files in cloud storage
-        try:
-            if self.bq_client is None:
-                self.bq_client = bigquery.Client()
-            for crawl_name in self.crawls:
-                logging.info('Generating %s url list...', crawl_name)
-                crawl = self.crawls[crawl_name]
-                query = crawl['urls_query']
-                job_config = bigquery.job.QueryJobConfig(use_query_cache=False)
-                job = self.bq_client.query(query, job_config=job_config)
-                _ = job.result()
-                ok = True
-        except Exception:
-            logging.exception('Error generating url list')
+        if TESTING:
+            ok = True
+        else:
+            # Delete any stale csv URL lists in cloud storage
+            self.delete_url_lists()
+
+            # Generate the new url list csv files in cloud storage
+            try:
+                if self.bq_client is None:
+                    self.bq_client = bigquery.Client()
+                for crawl_name in self.crawls:
+                    logging.info('Generating %s url list...', crawl_name)
+                    crawl = self.crawls[crawl_name]
+                    query = crawl['urls_query']
+                    job_config = bigquery.job.QueryJobConfig(use_query_cache=False)
+                    job = self.bq_client.query(query, job_config=job_config)
+                    _ = job.result()
+                    ok = True
+            except Exception:
+                logging.exception('Error generating url list')
         
         # Download the new csv url lists
         if ok:
@@ -509,8 +519,8 @@ class Crawl(object):
         index = 0
         test_count = 0
         while not all_done:
-            if TESTING and test_count > 10:
-                break
+            #if TESTING and test_count > 10:
+            #    break
             for crawl_name in url_lists:
                 crawl = url_lists[crawl_name]
                 try:
@@ -545,7 +555,8 @@ class Crawl(object):
                                     'gcs_har_upload': {
                                         'bucket': self.bucket,
                                         'path': self.har_archive + '/' + self.crawls[crawl_name]['crawl_name']
-                                    }
+                                    },
+                                    'bq_datastore': self.bq_datastore
                                 }
                                 if MAX_DEPTH > 0:
                                     job['beanstalk_completed_queue'] = 'complete'
