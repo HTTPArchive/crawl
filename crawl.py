@@ -24,7 +24,7 @@ RUN_TIME = 3500
 RETRY_COUNT = 2
 MAX_DEPTH = 1
 MAX_BREADTH = 1
-TESTING = True
+TESTING = False
 STATUS_DIRTY = False
 
 class Crawl(object):
