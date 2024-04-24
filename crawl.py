@@ -24,7 +24,7 @@ RUN_TIME = 3500
 RETRY_COUNT = 2
 MAX_DEPTH = 1
 MAX_BREADTH = 1
-TESTING = False
+TESTING = True
 STATUS_DIRTY = False
 
 class Crawl(object):
@@ -519,7 +519,7 @@ class Crawl(object):
         index = 0
         test_count = 0
         while not all_done:
-            #if TESTING and test_count > 10:
+            #if TESTING and test_count >= 10:
             #    break
             for crawl_name in url_lists:
                 crawl = url_lists[crawl_name]
@@ -555,7 +555,8 @@ class Crawl(object):
                                     'gcs_har_upload': {
                                         'bucket': self.bucket,
                                         'path': self.har_archive + '/' + self.crawls[crawl_name]['crawl_name']
-                                    }
+                                    },
+                                    'bq_datastore': self.bq_datastore
                                 }
                                 if MAX_DEPTH > 0:
                                     job['beanstalk_completed_queue'] = 'complete'
