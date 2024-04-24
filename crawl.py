@@ -24,8 +24,10 @@ RUN_TIME = 3500
 RETRY_COUNT = 2
 MAX_DEPTH = 1
 MAX_BREADTH = 1
-TESTING = False
 STATUS_DIRTY = False
+
+TESTING = True
+LIMIT_TESTS = False
 
 class Crawl(object):
     """Main agent workflow"""
@@ -519,8 +521,8 @@ class Crawl(object):
         index = 0
         test_count = 0
         while not all_done:
-            #if TESTING and test_count >= 10:
-            #    break
+            if TESTING and LIMIT_TESTS and test_count >= 10:
+                break
             for crawl_name in url_lists:
                 crawl = url_lists[crawl_name]
                 try:
