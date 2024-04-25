@@ -375,7 +375,7 @@ class Crawl(object):
                     if modified < self.now:
                         delta = self.now - modified
                         hours = delta.total_seconds() / 3600.0
-                        if hours > 24.0:
+                        if hours > 6.0:
                             updated = True
                         else:
                             logging.info('Crux URL list updated too recently - %0.1f hours ago at %d:%02d on %d/%d/%d (m/d/y)', hours, modified.hour, modified.minute, modified.month, modified.day, modified.year)
