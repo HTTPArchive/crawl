@@ -26,7 +26,7 @@ MAX_DEPTH = 1
 MAX_BREADTH = 1
 STATUS_DIRTY = False
 
-TESTING = True
+TESTING = False
 LIMIT_TESTS = False
 
 class Crawl(object):
