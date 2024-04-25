@@ -23,7 +23,7 @@ def main():
             count = 0
             try:
                 while True:
-                    job = beanstalk.reserve(1)
+                    job = beanstalk.reserve(0)
                     if tube == 'failed':
                         logging.info("Failed job: %s", zlib.decompress(job.body).decode())
                     count += 1
