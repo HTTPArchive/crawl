@@ -11,7 +11,8 @@ from google.cloud import monitoring_v3
 TUBES = {'crawl': 'Crawl tests work queue',
          'retry': 'Crawl tests retry queue',
          'failed': 'Crawl tests failed queue',
-         'complete': 'Crawl tests completed queue'}
+         'complete': 'Crawl tests completed queue',
+         'vm': 'Fake tube to track the number of VMs needed'}
 
 GROUPS = ['global', 'central-1', 'east-1', 'east-4', 'west-1', 'west-2', 'west-3', 'west-4']
 
@@ -23,6 +24,7 @@ class Monitor(object):
     def run(self):
         """ Update the metrics every 30 seconds """
         while True:
+            active = False
             counts = {}
             for tube in TUBES:
                 counts[tube] = 0
@@ -35,8 +37,14 @@ class Monitor(object):
                         logging.info('%s: %d', tube, count)
                         if tube in TUBES:
                             counts[tube] = count
+                            if tube == 'crawl' and count > 0:
+                                active = True
                     except Exception:
                         pass
+                # Create a fake metric for the number of VMs that are "needed"
+                # Default it to 100,000 while the cral is active and 0 when it is not
+                if active:
+                    counts['vm'] = 100000
             except Exception:
                 logging.exception("Error collecting metrics")
             try:
