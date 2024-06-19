@@ -38,7 +38,7 @@ class Crawl(object):
         self.root_path = os.path.abspath(os.path.dirname(__file__))
         self.data_path = os.path.join(self.root_path, 'data')
         #self.bq_datastore = 'httparchive.all'
-        self.bq_datastore = 'httparchive.z_test_all'
+        self.bq_datastore = 'httparchive.crawl_staging'
         if TESTING:
             self.data_path = os.path.join(self.root_path, 'data-test')
             self.bq_datastore = 'httparchive.z_test_all'
