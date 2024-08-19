@@ -344,6 +344,7 @@ class Crawl(object):
                         except Exception:
                             pass
                     if self.update_url_lists():
+                        self.reset_staging_tables()
                         self.submit_initial_tests()
                         self.save_status()
             except Exception:
@@ -460,6 +461,25 @@ class Crawl(object):
         # Download the new csv url lists
         if ok:
             ok = self.download_url_lists()
+        return ok
+
+    def reset_staging_tables(self):
+        """ Truncate the staging tables """
+        from google.cloud import bigquery
+        ok = True
+
+        tables = ['pages', 'requests', 'parsed_css']
+        query = ''
+        for table in tables:
+            query += "TRUNCATE TABLE `httparchive.crawl_staging.{0}`;\n".format(table)
+        try:
+            if self.bq_client is None:
+                self.bq_client = bigquery.Client()
+            job_config = bigquery.job.QueryJobConfig(use_query_cache=False)
+            job = self.bq_client.query(query, job_config=job_config)
+            _ = job.result()
+        except Exception:
+            logging.exception('Error resetting staging tables')
         return ok
 
     def submit_jobs(self):
