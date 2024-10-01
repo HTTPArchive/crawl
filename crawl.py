@@ -472,6 +472,7 @@ class Crawl(object):
         query = ''
         for table in tables:
             query += "TRUNCATE TABLE `httparchive.crawl_staging.{0}`;\n".format(table)
+            query += "TRUNCATE TABLE `httparchive.crawl_failures.{0}`;\n".format(table)
         try:
             if self.bq_client is None:
                 self.bq_client = bigquery.Client()
@@ -578,7 +579,8 @@ class Crawl(object):
                                         'bucket': self.bucket,
                                         'path': self.har_archive + '/' + self.crawls[crawl_name]['crawl_name']
                                     },
-                                    'bq_datastore': self.bq_datastore
+                                    'bq_datastore': self.bq_datastore,
+                                    'bq_datastore_failures': 'httparchive.crawl_failures'
                                 }
                                 if MAX_DEPTH > 0:
                                     job['beanstalk_completed_queue'] = 'complete'
