@@ -26,8 +26,8 @@ MAX_DEPTH = 1
 MAX_BREADTH = 1
 STATUS_DIRTY = False
 
-TESTING = False
-LIMIT_TESTS = False
+TESTING = True
+LIMIT_TESTS = True
 
 class Crawl(object):
     """Main agent workflow"""
@@ -41,7 +41,7 @@ class Crawl(object):
         self.bq_datastore = 'httparchive.crawl_staging'
         if TESTING:
             self.data_path = os.path.join(self.root_path, 'data-test')
-            self.bq_datastore = 'httparchive.z_test_all'
+            #self.bq_datastore = 'httparchive.z_test_all'
         self.bq_client = None
         self.crawls = {
             'Desktop': {
@@ -122,7 +122,7 @@ class Crawl(object):
         self.job_thread = threading.Thread(target=self.submit_jobs)
         self.job_thread.start()
         self.start_crawl()
-        if not self.status['done']:
+        if 'done' not in self.status or not self.status['done']:
             STATUS_DIRTY = True
             threads = []
             thread = threading.Thread(target=self.retry_thread)
