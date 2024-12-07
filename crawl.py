@@ -26,8 +26,8 @@ MAX_DEPTH = 1
 MAX_BREADTH = 1
 STATUS_DIRTY = False
 
-TESTING = False
-LIMIT_TESTS = False
+TESTING = True
+LIMIT_TESTS = True
 
 class Crawl(object):
     """Main agent workflow"""
