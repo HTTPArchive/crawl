@@ -26,8 +26,8 @@ MAX_DEPTH = 1
 MAX_BREADTH = 1
 STATUS_DIRTY = False
 
-TESTING = False
-LIMIT_TESTS = False
+TESTING = True
+LIMIT_TESTS = True
 
 class Crawl(object):
     """Main agent workflow"""
@@ -37,11 +37,9 @@ class Crawl(object):
         self.now = datetime.now(tz=timezone.utc)
         self.root_path = os.path.abspath(os.path.dirname(__file__))
         self.data_path = os.path.join(self.root_path, 'data')
-        #self.bq_datastore = 'httparchive.all'
         self.bq_datastore = 'httparchive.crawl_staging'
         if TESTING:
             self.data_path = os.path.join(self.root_path, 'data-test')
-            #self.bq_datastore = 'httparchive.z_test_all'
         self.bq_client = None
         self.crawls = {
             'Desktop': {
@@ -468,7 +466,7 @@ class Crawl(object):
         from google.cloud import bigquery
         ok = True
 
-        tables = ['pages', 'requests', 'parsed_css']
+        tables = ['pages', 'requests', 'parsed_css', 'script_chunks']
         query = ''
         for table in tables:
             query += "TRUNCATE TABLE `httparchive.crawl_staging.{0}`;\n".format(table)
