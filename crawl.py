@@ -32,7 +32,6 @@ LIMIT_TESTS = False
 class Crawl(object):
     """Main agent workflow"""
     def __init__(self):
-        from pymemcache.client.base import Client
         self.must_exit = False
         self.exit_reader = False
         self.now = datetime.now(tz=timezone.utc)
@@ -42,7 +41,6 @@ class Crawl(object):
         if TESTING:
             self.data_path = os.path.join(self.root_path, 'data-test')
         self.bq_client = None
-        self.memcache = Client('localhost', connect_timeout=10, timeout=10, no_delay=True)
         self.crawls = {
             'Desktop': {
                 'urls_file': 'urls/desktop/',
@@ -347,8 +345,6 @@ class Crawl(object):
                         self.reset_staging_tables()
                         self.submit_initial_tests()
                         self.save_status()
-                    # Flush the memcache instance
-                    self.memcache.flush_all()
             except Exception:
                 logging.exception('Error starting new crawl')
         elif self.status is not None and not self.status.get('done'):
