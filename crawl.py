@@ -132,6 +132,9 @@ class Crawl(object):
             thread = threading.Thread(target=self.completed_thread)
             thread.start()
             threads.append(thread)
+            thread = threading.Thread(target=self.metrics_thread)
+            thread.start()
+            threads.append(thread)
 
             # Pump jobs until time is up
             time.sleep(RUN_TIME)
@@ -166,17 +169,52 @@ class Crawl(object):
         if not self.status['done']:
             self.save_crawled()
 
+    def metrics_thread(self):
+        """Thread to report metrics"""
+        try:
+            from google.cloud import monitoring_v3
+            while not self.exit_reader:
+                try:
+                    if self.status is not None and 'counts' in self.status:
+                        client = monitoring_v3.MetricServiceClient()
+                        project_name = "projects/httparchive"
+                        values = []
+                        for metric in self.status['counts']:
+                            series = monitoring_v3.TimeSeries()
+                            series.metric.type = "custom.googleapis.com/crawl/global/{}_count".format(metric)
+                            series.resource.type = "global"
+                            series.resource.labels["project_id"] = 'httparchive'
+                            series.metric.labels["queue"] = metric
+                            now = time.time()
+                            seconds = int(now)
+                            nanos = int((now - seconds) * 10**9)
+                            interval = monitoring_v3.TimeInterval(
+                                {"end_time": {"seconds": seconds, "nanos": nanos}}
+                            )
+                            point = monitoring_v3.Point({"interval": interval, "value": {"double_value": self.status['counts'][metric]}})
+                            series.points = [point]
+                            values.append(series)
+                        client.create_time_series(name=project_name, time_series=values)
+                except Exception:
+                    logging.exception('Error logging metrics')
+                time.sleep(30)
+        except Exception:
+            logging.exception('Error monitoring metrics')
+
     def retry_thread(self):
         """Thread for retry queue subscription"""
         try:
             beanstalk = greenstalk.Client(('127.0.0.1', 11300), encoding=None, watch='retry')
             while not self.exit_reader:
                 try:
-                    job = beanstalk.reserve(10)
-                    if job is not None:
-                        task = zlib.decompress(job.body).decode()
+                    job_beanstalk = beanstalk.reserve(10)
+                    if job_beanstalk is not None:
+                        task = zlib.decompress(job_beanstalk.body).decode()
+                        with self.status_mutex:
+                            if 'counts' in self.status:
+                                self.status['counts']['retried'] += 1
                         self.retry_job(task)
-                    beanstalk.delete(job)
+                    beanstalk.delete(job_beanstalk)
                 except Exception:
                     pass
         except Exception:
@@ -200,6 +238,8 @@ class Crawl(object):
                         except Exception:
                             logging.exception('Error logging failed test')
                         with self.status_mutex:
+                            if 'counts' in self.status:
+                                self.status['counts']['failed'] += 1
                             if self.status is not None and 'crawls' in self.status and crawl_name in self.status['crawls']:
                                 crawl = self.status['crawls'][crawl_name]
                                 if 'failed_count' not in crawl:
@@ -219,11 +259,14 @@ class Crawl(object):
             beanstalk = greenstalk.Client(('127.0.0.1', 11300), encoding=None, watch='complete')
             while not self.exit_reader:
                 try:
-                    job = beanstalk.reserve(10)
-                    if job is not None:
-                        task = zlib.decompress(job.body).decode()
+                    job_beanstalk = beanstalk.reserve(10)
+                    if job_beanstalk is not None:
+                        task = zlib.decompress(job_beanstalk.body).decode()
+                        with self.status_mutex:
+                            if 'counts' in self.status:
+                                self.status['counts']['completed'] += 1
                         self.crawl_job(task)
-                    beanstalk.delete(job)
+                    beanstalk.delete(job_beanstalk)
                 except Exception:
                     pass
         except Exception:
@@ -501,10 +544,12 @@ class Crawl(object):
                             total_count += 1
                             if pending_count >= 10000:
                                 logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
-                                pending_count = 0
                                 with self.status_mutex:
+                                    if 'counts' in self.status:
+                                        self.status['counts']['submitted'] += pending_count
                                     if self.status is not None:
                                         self.status['last'] = time.time()
+                                pending_count = 0
                         self.job_queue.task_done()
                 except queue.Empty:
                     pass
@@ -512,10 +557,12 @@ class Crawl(object):
                     logging.exception('Job queue exception')
                 if pending_count:
                     logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
-                    pending_count = 0
                     with self.status_mutex:
+                        if 'counts' in self.status:
+                            self.status['counts']['submitted'] += pending_count
                         if self.status is not None:
                             self.status['last'] = time.time()
+                    pending_count = 0
         except Exception:
             logging.exception('Error connecting to beanstalk in submit thread')
         logging.debug('Submit thread complete')
@@ -605,6 +652,12 @@ class Crawl(object):
             'crawls': {},
             'done': False,
             'count': test_count,
+            'counts': {
+                'submitted': 0,
+                'completed': 0,
+                'failed': 0,
+                'retried': 0
+            },
             'last': time.time()
         }
 
@@ -668,6 +721,13 @@ class Crawl(object):
             try:
                 with open(self.status_file, 'rt') as f:
                     self.status = json.load(f)
+                    if self.status is not None and 'counts' not in self.status:
+                        self.status['counts'] = {
+                            'submitted': 0,
+                            'completed': 0,
+                            'failed': 0,
+                            'retried': 0
+                        },
             except Exception:
                 logging.exception('Error loading status')
         if self.status is not None:
