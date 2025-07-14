@@ -212,7 +212,7 @@ class Crawl(object):
                         task = zlib.decompress(job_beanstalk.body).decode()
                         with self.status_mutex:
                             if 'counts' in self.status and 'retried' in self.status['counts']:
-                                self.status['counts']['retried'] += 1
+                                self.status['counts']['retried'] = self.status['counts']['retried'] + 1
                         self.retry_job(task)
                     beanstalk.delete(job_beanstalk)
                 except Exception:
@@ -239,7 +239,7 @@ class Crawl(object):
                             logging.exception('Error logging failed test')
                         with self.status_mutex:
                             if 'counts' in self.status and 'failed' in self.status['counts']:
-                                self.status['counts']['failed'] += 1
+                                self.status['counts']['failed'] = self.status['counts']['failed'] + 1
                             if self.status is not None and 'crawls' in self.status and crawl_name in self.status['crawls']:
                                 crawl = self.status['crawls'][crawl_name]
                                 if 'failed_count' not in crawl:
@@ -264,7 +264,7 @@ class Crawl(object):
                         task = zlib.decompress(job_beanstalk.body).decode()
                         with self.status_mutex:
                             if 'counts' in self.status and 'completed' in self.status['counts']:
-                                self.status['counts']['completed'] += 1
+                                self.status['counts']['completed'] = self.status['counts']['completed'] + 1
                         self.crawl_job(task)
                     beanstalk.delete(job_beanstalk)
                 except Exception:
