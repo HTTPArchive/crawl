@@ -211,7 +211,7 @@ class Crawl(object):
                     if job_beanstalk is not None:
                         task = zlib.decompress(job_beanstalk.body).decode()
                         with self.status_mutex:
-                            if 'counts' in self.status:
+                            if 'counts' in self.status and 'retried' in self.status['counts']:
                                 self.status['counts']['retried'] += 1
                         self.retry_job(task)
                     beanstalk.delete(job_beanstalk)
@@ -238,7 +238,7 @@ class Crawl(object):
                         except Exception:
                             logging.exception('Error logging failed test')
                         with self.status_mutex:
-                            if 'counts' in self.status:
+                            if 'counts' in self.status and 'failed' in self.status['counts']:
                                 self.status['counts']['failed'] += 1
                             if self.status is not None and 'crawls' in self.status and crawl_name in self.status['crawls']:
                                 crawl = self.status['crawls'][crawl_name]
@@ -263,7 +263,7 @@ class Crawl(object):
                     if job_beanstalk is not None:
                         task = zlib.decompress(job_beanstalk.body).decode()
                         with self.status_mutex:
-                            if 'counts' in self.status:
+                            if 'counts' in self.status and 'completed' in self.status['counts']:
                                 self.status['counts']['completed'] += 1
                         self.crawl_job(task)
                     beanstalk.delete(job_beanstalk)
@@ -545,7 +545,7 @@ class Crawl(object):
                             if pending_count >= 10000:
                                 logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
                                 with self.status_mutex:
-                                    if 'counts' in self.status:
+                                    if 'counts' in self.status and 'submitted' in self.status['counts']:
                                         self.status['counts']['submitted'] += pending_count
                                     if self.status is not None:
                                         self.status['last'] = time.time()
@@ -558,7 +558,7 @@ class Crawl(object):
                 if pending_count:
                     logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
                     with self.status_mutex:
-                        if 'counts' in self.status:
+                        if 'counts' in self.status and 'submitted' in self.status['counts']:
                             self.status['counts']['submitted'] += pending_count
                         if self.status is not None:
                             self.status['last'] = time.time()
