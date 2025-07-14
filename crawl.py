@@ -721,13 +721,6 @@ class Crawl(object):
             try:
                 with open(self.status_file, 'rt') as f:
                     self.status = json.load(f)
-                    if self.status is not None and 'counts' not in self.status:
-                        self.status['counts'] = {
-                            'submitted': 0,
-                            'completed': 0,
-                            'failed': 0,
-                            'retried': 0
-                        },
             except Exception:
                 logging.exception('Error loading status')
         if self.status is not None:
@@ -737,6 +730,13 @@ class Crawl(object):
                 self.previous_count = self.status['count']
             if 'tm' in self.status:
                 self.previous_time = self.status['tm']
+            if 'counts' not in self.status:
+                self.status['counts'] = {
+                    'submitted': 0,
+                    'completed': 0,
+                    'failed': 0,
+                    'retried': 0
+                }
 
     def load_crawled(self):
         logging.info('Loading crawled...')
