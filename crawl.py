@@ -329,22 +329,24 @@ class Crawl(object):
                 if links:
                     for link in links:
                         try:
-                            link_origin = urlparse(link).hostname.lower()
-                            _, extension = os.path.splitext(urlparse(link).path.lower())
-                            if link_origin == parent_origin and extension not in skip_extensions and link not in visited:
-                                with self.status_mutex:
-                                    if root_page not in self.crawled:
-                                        self.crawled[root_page] = 0
-                                    self.crawled[root_page] += 1
-                                    if self.crawled[root_page] > max_children:
+                            parsed = urlparse(link)
+                            if parsed.hostname is not None and parsed.path is not None:
+                                link_origin = parsed.hostname.lower()
+                                _, extension = os.path.splitext(parsed.path.lower())
+                                if link_origin == parent_origin and extension not in skip_extensions and link not in visited:
+                                    with self.status_mutex:
+                                        if root_page not in self.crawled:
+                                            self.crawled[root_page] = 0
+                                        self.crawled[root_page] += 1
+                                        if self.crawled[root_page] > max_children:
+                                            break
+                                    width += 1
+                                    if width > MAX_BREADTH:
                                         break
-                                width += 1
-                                if width > MAX_BREADTH:
-                                    break
-                                crawl_links.append(link)
-                                visited.append(link)
+                                    crawl_links.append(link)
+                                    visited.append(link)
                         except Exception:
-                            logging.exception('Error parsing URL')
+                            logging.exception('Error parsing URL %s', link)
                 job['metadata']['visited'] = visited
                 # Create the new jobs
                 width = 0
