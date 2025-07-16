@@ -181,7 +181,7 @@ class Crawl(object):
                         values = []
                         for metric in self.status['counts']:
                             series = monitoring_v3.TimeSeries()
-                            series.metric.type = "custom.googleapis.com/crawl/counts/{}".format(metric)
+                            series.metric.type = "custom.googleapis.com/counts/global/{}".format(metric)
                             series.resource.type = "global"
                             series.resource.labels["project_id"] = 'httparchive'
                             series.metric.labels["queue"] = metric
