@@ -113,7 +113,7 @@ class Crawl(object):
         if os.path.exists(crux_file):
             with open(crux_file, 'rt') as f:
                 self.crux_keys = json.load(f)
-        self.job_queue = queue.Queue(maxsize=2000)
+        self.job_queue = queue.Queue(maxsize=20000)
         self.job_thread = None
 
     def run(self):
