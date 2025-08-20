@@ -571,7 +571,7 @@ class Crawl(object):
                             if pending_count >= 10000:
                                 logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
                                 with self.status_mutex:
-                                    if 'counts' in self.status and 'submitted' in self.status['counts']:
+                                    if self.status is not None and 'counts' in self.status and 'submitted' in self.status['counts']:
                                         self.status['counts']['submitted'] += pending_count
                                     if self.status is not None:
                                         self.status['last'] = time.time()
@@ -584,7 +584,7 @@ class Crawl(object):
                 if pending_count:
                     logging.info('Queued %d tests (%d in this batch)...', total_count, pending_count)
                     with self.status_mutex:
-                        if 'counts' in self.status and 'submitted' in self.status['counts']:
+                        if self.status is not None and 'counts' in self.status and 'submitted' in self.status['counts']:
                             self.status['counts']['submitted'] += pending_count
                         if self.status is not None:
                             self.status['last'] = time.time()
@@ -598,6 +598,21 @@ class Crawl(object):
         import csv
         global TESTING
         global LIMIT_TESTS
+
+        with self.status_mutex:
+            self.status = {
+                'crawl': self.current_crawl,
+                'crawls': {},
+                'done': False,
+                'count': test_count,
+                'counts': {
+                    'submitted': 0,
+                    'completed': 0,
+                    'failed': 0,
+                    'retried': 0
+                },
+                'last': time.time()
+            }
 
         if self.job_thread is None:
             self.job_thread = threading.Thread(target=self.submit_jobs)
@@ -687,30 +702,20 @@ class Crawl(object):
                         if not url_lists[name]['done']:
                             all_done = False
 
-        self.status = {
-            'crawl': self.current_crawl,
-            'crawls': {},
-            'done': False,
-            'count': test_count,
-            'counts': {
-                'submitted': 0,
-                'completed': 0,
-                'failed': 0,
-                'retried': 0
-            },
-            'last': time.time()
-        }
+        with self.status_mutex:
+            self.status['count'] = test_count
+            self.status['last'] = time.time()
 
-        # Close the CSV files and initialize the status
-        for crawl_name in url_lists:
-            crawl = url_lists[crawl_name]
-            self.status['crawls'][crawl_name] = {
-                'url_count': crawl['count'],
-                'failed_count': 0,
-                'name': self.crawls[crawl_name]['crawl_name']
-            }
-            logging.info('%s URLs submitted: %d', crawl_name, crawl['count'])
-            crawl['fp'].close()
+            # Close the CSV files and initialize the status
+            for crawl_name in url_lists:
+                crawl = url_lists[crawl_name]
+                self.status['crawls'][crawl_name] = {
+                    'url_count': crawl['count'],
+                    'failed_count': 0,
+                    'name': self.crawls[crawl_name]['crawl_name']
+                }
+                logging.info('%s URLs submitted: %d', crawl_name, crawl['count'])
+                crawl['fp'].close()
 
     def check_done(self):
         """Check the beanstalk queue lengths to see the crawl progress"""
