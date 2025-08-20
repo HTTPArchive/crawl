@@ -114,12 +114,14 @@ class Crawl(object):
             with open(crux_file, 'rt') as f:
                 self.crux_keys = json.load(f)
         self.job_queue = queue.Queue(maxsize=2000)
+        self.job_thread = None
 
     def run(self):
         """Main Crawl entrypoint"""
         self.start_crawl()
-        self.job_thread = threading.Thread(target=self.submit_jobs)
-        self.job_thread.start()
+        if self.job_thread is None:
+            self.job_thread = threading.Thread(target=self.submit_jobs)
+            self.job_thread.start()
         if 'done' not in self.status or not self.status['done']:
             STATUS_DIRTY = True
             threads = []
@@ -594,6 +596,10 @@ class Crawl(object):
     def submit_initial_tests(self):
         """Interleave between the URL lists for the various crawls and post jobs to the submit thread"""
         import csv
+
+        if self.job_thread is None:
+            self.job_thread = threading.Thread(target=self.submit_jobs)
+            self.job_thread.start()
 
         logging.info('Submitting URLs for testing...')
         url_lists = {}
