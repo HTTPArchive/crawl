@@ -390,19 +390,19 @@ class Crawl(object):
         """Start a new crawl if necessary"""
         if self.status is None or 'crawl' not in self.status or self.status['crawl'] != self.current_crawl:
             try:
+                # Delete the old logs
+                try:
+                    os.unlink('crawl.log')
+                except Exception:
+                    pass
+                self.start_logging()
                 self.crawled = {}
                 if TESTING or self.crux_updated():
-                    # Delete the old logs
-                    try:
-                        os.unlink('crawl.log')
-                    except Exception:
-                        pass
                     for crawl_name in self.crawls:
                         try:
                             os.unlink(os.path.join(self.root_path, crawl_name + '_failed.log'))
                         except Exception:
                             pass
-                    self.start_logging()
                     if self.update_url_lists():
                         self.reset_staging_tables()
                         self.submit_initial_tests()
@@ -440,6 +440,7 @@ class Crawl(object):
                         hours = delta.total_seconds() / 3600.0
                         if hours > 6.0:
                             updated = True
+                            logging.info('CrUX URL list updated.')
                         else:
                             logging.info('Crux URL list updated too recently - %0.1f hours ago at %d:%02d on %d/%d/%d (m/d/y)', hours, modified.hour, modified.minute, modified.month, modified.day, modified.year)
                     else:
