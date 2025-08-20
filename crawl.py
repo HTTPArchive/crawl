@@ -543,7 +543,7 @@ class Crawl(object):
             job_config = bigquery.job.QueryJobConfig(use_query_cache=False)
             job = self.bq_client.query(query, job_config=job_config)
             _ = job.result()
-        logging.info('Staging tables truncated.')
+            logging.info('Staging tables truncated.')
         except Exception:
             logging.exception('Error resetting staging tables')
         return ok
