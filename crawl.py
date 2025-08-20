@@ -596,6 +596,8 @@ class Crawl(object):
     def submit_initial_tests(self):
         """Interleave between the URL lists for the various crawls and post jobs to the submit thread"""
         import csv
+        global TESTING
+        global LIMIT_TESTS
 
         if self.job_thread is None:
             self.job_thread = threading.Thread(target=self.submit_jobs)
