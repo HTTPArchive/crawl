@@ -379,8 +379,12 @@ class Crawl(object):
         else:
             logging.basicConfig(
                 level=logging.INFO,
-                filename='crawl.log',
-                format="%(asctime)s.%(msecs)03d - %(message)s", datefmt="%H:%M:%S")
+                format="%(asctime)s.%(msecs)03d - %(message)s",
+                datefmt="%H:%M:%S",
+                handlers=[
+                    logging.FileHandler('crawl.log'),
+                    logging.StreamHandler()
+                ])
 
     def start_crawl(self):
         """Start a new crawl if necessary"""
