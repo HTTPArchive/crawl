@@ -604,7 +604,7 @@ class Crawl(object):
                 'crawl': self.current_crawl,
                 'crawls': {},
                 'done': False,
-                'count': test_count,
+                'count': 0,
                 'counts': {
                     'submitted': 0,
                     'completed': 0,
