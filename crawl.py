@@ -117,9 +117,9 @@ class Crawl(object):
 
     def run(self):
         """Main Crawl entrypoint"""
+        self.start_crawl()
         self.job_thread = threading.Thread(target=self.submit_jobs)
         self.job_thread.start()
-        self.start_crawl()
         if 'done' not in self.status or not self.status['done']:
             STATUS_DIRTY = True
             threads = []
@@ -372,6 +372,7 @@ class Crawl(object):
 
     def start_logging(self):
         """Configure logging"""
+        global TESTING
         if TESTING:
             logging.basicConfig(
                 level=logging.DEBUG,
@@ -542,6 +543,7 @@ class Crawl(object):
             job_config = bigquery.job.QueryJobConfig(use_query_cache=False)
             job = self.bq_client.query(query, job_config=job_config)
             _ = job.result()
+        logging.info('Staging tables truncated.')
         except Exception:
             logging.exception('Error resetting staging tables')
         return ok
@@ -818,6 +820,7 @@ lock_handle = None
 def run_once():
     """Use a non-blocking lock on the current code file to make sure multiple instance aren't running"""
     global lock_handle
+    global TESTING
     try:
         lock_handle = open(os.path.realpath(__file__) + '.lock','w')
         fcntl.flock(lock_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
