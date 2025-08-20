@@ -607,10 +607,12 @@ class Crawl(object):
         for crawl_name in self.crawls:
             url_lists[crawl_name] = {}
             crawl = url_lists[crawl_name]
-            crawl['fp'] = open(os.path.join(self.data_path, crawl_name + '.csv'), 'rt', newline='')
+            file_path = os.path.join(self.data_path, crawl_name + '.csv')
+            crawl['fp'] = open(file_path, 'rt', newline='')
             crawl['reader'] = csv.reader(crawl['fp'])
             crawl['count'] = 0
             crawl['done'] = False
+            logging.info("Set up CSV reader for %s", file_path)
 
         # Iterate over all of the crawls in parallel
         all_done = False
@@ -621,6 +623,8 @@ class Crawl(object):
                 break
             for crawl_name in url_lists:
                 crawl = url_lists[crawl_name]
+                if crawl['done']:
+                    continue
                 try:
                     entry = next(crawl['reader'])
                     try:
@@ -668,6 +672,10 @@ class Crawl(object):
                                 test_count += 1
                                 if test_count % 10000 == 0:
                                     logging.debug("Sent %d tests to be processed...", test_count)
+                            else:
+                                logging.info("Invalid URL: %s", url)
+                        else:
+                            logging.info("Invalid CSV entry: %s", json.dumps(entry))
                     except Exception:
                         logging.exception('Error processing URL')
                 except StopIteration:
