@@ -370,6 +370,18 @@ class Crawl(object):
         except Exception:
             logging.exception('Error processing crawl job')
 
+    def start_logging(self):
+        """Configure logging"""
+        if TESTING:
+            logging.basicConfig(
+                level=logging.DEBUG,
+                format="%(asctime)s.%(msecs)03d - %(message)s", datefmt="%H:%M:%S")
+        else:
+            logging.basicConfig(
+                level=logging.INFO,
+                filename='crawl.log',
+                format="%(asctime)s.%(msecs)03d - %(message)s", datefmt="%H:%M:%S")
+
     def start_crawl(self):
         """Start a new crawl if necessary"""
         if self.status is None or 'crawl' not in self.status or self.status['crawl'] != self.current_crawl:
@@ -386,6 +398,7 @@ class Crawl(object):
                             os.unlink(os.path.join(self.root_path, crawl_name + '_failed.log'))
                         except Exception:
                             pass
+                    self.start_logging()
                     if self.update_url_lists():
                         self.reset_staging_tables()
                         self.submit_initial_tests()
@@ -393,8 +406,10 @@ class Crawl(object):
             except Exception:
                 logging.exception('Error starting new crawl')
         elif self.status is not None and not self.status.get('done'):
+            self.start_logging()
             self.load_crawled()
         else:
+            self.start_logging()
             logging.info('No new crawl pending.')
 
     def crux_updated(self):
@@ -802,19 +817,19 @@ def run_once():
         lock_handle = open(os.path.realpath(__file__) + '.lock','w')
         fcntl.flock(lock_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except:
+        if TESTING:
+            logging.basicConfig(
+                level=logging.DEBUG,
+                format="%(asctime)s.%(msecs)03d - %(message)s", datefmt="%H:%M:%S")
+        else:
+            logging.basicConfig(
+                level=logging.INFO,
+                filename='crawl.log',
+                format="%(asctime)s.%(msecs)03d - %(message)s", datefmt="%H:%M:%S")
         logging.critical('Already running')
         os._exit(0)
 
 if __name__ == '__main__':
-    if TESTING:
-        logging.basicConfig(
-            level=logging.DEBUG,
-            format="%(asctime)s.%(msecs)03d - %(message)s", datefmt="%H:%M:%S")
-    else:
-        logging.basicConfig(
-            level=logging.INFO,
-            filename='crawl.log',
-            format="%(asctime)s.%(msecs)03d - %(message)s", datefmt="%H:%M:%S")
     run_once()
     crawl = Crawl()
     crawl.run()
