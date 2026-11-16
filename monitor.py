@@ -4,6 +4,7 @@ import fcntl
 import greenstalk
 import json
 import logging
+import math
 import os
 import time
 from google.cloud import monitoring_v3
@@ -37,14 +38,12 @@ class Monitor(object):
                         logging.info('%s: %d', tube, count)
                         if tube in TUBES:
                             counts[tube] = count
-                            if tube == 'crawl' and count > 0:
-                                active = True
                     except Exception:
                         pass
-                # Create a fake metric for the number of VMs that are "needed"
-                # Default it to 100,000 while the cral is active and 0 when it is not
-                if active:
-                    counts['vm'] = 100000
+                # Scale VMs proportionally to remaining work across the 7 regional MIGs
+                remaining = counts['crawl'] + counts['retry'] + counts['complete']
+                if remaining > 0:
+                    counts['vm'] = min(2000, math.ceil(remaining / 70.0))
             except Exception:
                 logging.exception("Error collecting metrics")
             try:
