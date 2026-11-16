@@ -669,11 +669,13 @@ class Crawl(object):
                                     'beanstalk_retry_queue': 'retry',
                                     'gcs_test_archive': {
                                         'bucket': self.bucket,
-                                        'path': self.test_archive
+                                        'path': self.test_archive,
+                                        'upload': False
                                     },
                                     'gcs_har_upload': {
                                         'bucket': self.bucket,
-                                        'path': self.har_archive + '/' + self.crawls[crawl_name]['crawl_name']
+                                        'path': self.har_archive + '/' + self.crawls[crawl_name]['crawl_name'],
+                                        'upload': False
                                     },
                                     'bq_datastore': self.bq_datastore,
                                     'bq_datastore_failures': 'httparchive.crawl_failures'
